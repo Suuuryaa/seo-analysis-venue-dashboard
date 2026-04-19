@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import serp_utils
+import time
+from datetime import datetime
 
 from seo_utils import *
-from scoring import calculate_seo_score
+from scoring import calculate_seo_score, get_score_band
 from comparison_utils import compare_metric
 from leaderboard_utils import analyze_venue
 from summary_utils import get_executive_summary, generate_ai_executive_summary
@@ -20,6 +23,87 @@ from insight_utils import generate_strategic_insights
 from keyword_opportunity_utils import find_keyword_opportunities
 
 
+# ==================== UI HELPER FUNCTIONS ====================
+
+def create_score_gauge(score, title="SEO Score"):
+    """Create circular gauge visualization like professional SEO tools"""
+    
+    # Determine color and rating based on score
+    if score >= 80:
+        color = "#00C853"  # Green
+        rating = "Excellent"
+    elif score >= 70:
+        color = "#4CAF50"  # Light Green
+        rating = "Good"
+    elif score >= 60:
+        color = "#FFA726"  # Orange
+        rating = "Fair"
+    elif score >= 50:
+        color = "#FF7043"  # Deep Orange
+        rating = "Needs Work"
+    else:
+        color = "#EF5350"  # Red
+        rating = "Poor"
+    
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = score,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {
+            'text': f"<b>{title}</b><br><span style='font-size:0.7em; color:gray'>{rating}</span>",
+            'font': {'size': 20}
+        },
+        number = {'font': {'size': 48, 'color': color}},
+        gauge = {
+            'axis': {'range': [None, 100], 'tickwidth': 2, 'tickcolor': "lightgray"},
+            'bar': {'color': color, 'thickness': 0.75},
+            'bgcolor': "white",
+            'borderwidth': 3,
+            'bordercolor': "lightgray",
+            'steps': [
+                {'range': [0, 50], 'color': '#FFEBEE'},
+                {'range': [50, 70], 'color': '#FFF3E0'},
+                {'range': [70, 100], 'color': '#E8F5E9'}
+            ],
+            'threshold': {
+                'line': {'color': "darkgray", 'width': 3},
+                'thickness': 0.8,
+                'value': 70
+            }
+        }
+    ))
+    
+    fig.update_layout(
+        height=250,
+        margin=dict(l=20, r=20, t=80, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font={'color': "white"}
+    )
+    
+    return fig
+
+
+def status_indicator(passed, label):
+    """Create visual status indicator"""
+    if passed:
+        return f"<div style='padding: 5px; margin: 3px 0;'>✅ <span style='color: #00C853; font-weight: 500;'>{label}</span></div>"
+    else:
+        return f"<div style='padding: 5px; margin: 3px 0;'>❌ <span style='color: #EF5350; font-weight: 500;'>{label}</span></div>"
+
+
+def priority_badge(priority):
+    """Create priority badge with color"""
+    badges = {
+        "🔴 CRITICAL": "background-color: #EF5350; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: bold;",
+        "🟠 HIGH": "background-color: #FF7043; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: bold;",
+        "🟡 MEDIUM": "background-color: #FFA726; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: bold;",
+        "✅ EXCELLENT": "background-color: #00C853; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: bold;"
+    }
+    
+    style = badges.get(priority, "background-color: gray; color: white; padding: 3px 10px; border-radius: 12px;")
+    return f"<span style='{style}'>{priority}</span>"
+
+
 def build_recommended_fixes(
     title_has_keyword,
     meta_has_keyword,
@@ -28,124 +112,243 @@ def build_recommended_fixes(
     title_len,
     meta_len,
     missing_alt_count,
-    pagespeed_data
+    pagespeed_data,
+    https_enabled=True,
+    mobile_viewport=True,
+    has_schema=False
 ):
+    """Build prioritized recommendations list"""
     fixes = []
 
     if not title_has_keyword:
         fixes.append({
-            "Priority": "High",
+            "Priority": "🔴 CRITICAL",
             "Issue": "Target keyword missing from title",
-            "Recommended Fix": "Add the target keyword naturally to the page title."
+            "Recommended Fix": "Add the target keyword naturally to the page title.",
+            "Impact": "High - Title is the most important on-page SEO factor"
         })
 
     if not meta_has_keyword:
         fixes.append({
-            "Priority": "High",
+            "Priority": "🟠 HIGH",
             "Issue": "Target keyword missing from meta description",
-            "Recommended Fix": "Rewrite the meta description to include the target keyword and a stronger call to action."
+            "Recommended Fix": "Rewrite meta description to include keyword and compelling CTA.",
+            "Impact": "Medium - Improves click-through rate from search results"
         })
 
     if not h1_has_keyword:
         fixes.append({
-            "Priority": "High",
+            "Priority": "🔴 CRITICAL",
             "Issue": "Target keyword missing from H1",
-            "Recommended Fix": "Add the target keyword or a close variation into the main H1 heading."
+            "Recommended Fix": "Add target keyword or close variation to main H1 heading.",
+            "Impact": "High - H1 signals primary topic to search engines"
         })
 
     if kc == 0:
         fixes.append({
-            "Priority": "High",
+            "Priority": "🔴 CRITICAL",
             "Issue": "Exact keyword not present in page content",
-            "Recommended Fix": "Use the target keyword naturally in the intro, headings, and body copy."
+            "Recommended Fix": "Use target keyword naturally in intro, headings, and body copy.",
+            "Impact": "Critical - No relevance signals for target keyword"
         })
     elif kc < 3:
         fixes.append({
-            "Priority": "Medium",
-            "Issue": "Low keyword usage",
-            "Recommended Fix": "Increase keyword usage naturally across the page without stuffing."
+            "Priority": "🟡 MEDIUM",
+            "Issue": "Low keyword usage in content",
+            "Recommended Fix": "Increase keyword usage naturally (target: 5+ occurrences).",
+            "Impact": "Medium - Strengthens topical relevance"
         })
 
     if title_len < 30 or title_len > 60:
         fixes.append({
-            "Priority": "Medium",
-            "Issue": "Title length not ideal",
-            "Recommended Fix": "Keep title length between 30 and 60 characters."
+            "Priority": "🟡 MEDIUM",
+            "Issue": f"Title length not optimal ({title_len} characters)",
+            "Recommended Fix": "Keep title between 30-60 characters for best display.",
+            "Impact": "Low - May be truncated in search results"
         })
 
     if meta_len < 120 or meta_len > 160:
         fixes.append({
-            "Priority": "Medium",
-            "Issue": "Meta description length not ideal",
-            "Recommended Fix": "Keep meta description length between 120 and 160 characters."
+            "Priority": "🟡 MEDIUM",
+            "Issue": f"Meta description length not optimal ({meta_len} characters)",
+            "Recommended Fix": "Keep meta description between 120-160 characters.",
+            "Impact": "Low - May be truncated or rewritten by Google"
         })
 
     if missing_alt_count > 0:
         fixes.append({
-            "Priority": "Medium",
+            "Priority": "🟡 MEDIUM",
             "Issue": f"{missing_alt_count} images missing ALT text",
-            "Recommended Fix": "Add descriptive ALT text to improve accessibility and image SEO."
+            "Recommended Fix": "Add descriptive ALT text to improve accessibility and image SEO.",
+            "Impact": "Medium - Accessibility issue and missed opportunity"
+        })
+    
+    if not https_enabled:
+        fixes.append({
+            "Priority": "🔴 CRITICAL",
+            "Issue": "Site not using HTTPS",
+            "Recommended Fix": "Enable HTTPS/SSL certificate immediately.",
+            "Impact": "Critical - Security ranking factor"
+        })
+    
+    if not mobile_viewport:
+        fixes.append({
+            "Priority": "🔴 CRITICAL",
+            "Issue": "No mobile viewport configuration",
+            "Recommended Fix": "Add viewport meta tag for mobile-first indexing.",
+            "Impact": "Critical - Required for mobile search"
+        })
+    
+    if not has_schema:
+        fixes.append({
+            "Priority": "🟡 MEDIUM",
+            "Issue": "No structured data detected",
+            "Recommended Fix": "Add schema markup for rich snippets (LocalBusiness, Organization, etc.).",
+            "Impact": "Medium - Enables rich search results"
         })
 
     if pagespeed_data:
         perf = pagespeed_data.get("performance_score")
         if perf is not None and perf < 0.7:
             fixes.append({
-                "Priority": "High",
-                "Issue": "Weak mobile performance",
-                "Recommended Fix": "Improve load speed, reduce blocking resources, and optimize heavy media."
+                "Priority": "🟠 HIGH",
+                "Issue": "Weak mobile performance score",
+                "Recommended Fix": "Optimize load speed, reduce blocking resources, compress images.",
+                "Impact": "High - Core Web Vitals affect rankings"
             })
 
         cls = pagespeed_data.get("cumulative_layout_shift")
         if cls and cls != "None":
             fixes.append({
-                "Priority": "Medium",
+                "Priority": "🟡 MEDIUM",
                 "Issue": "Layout stability may need improvement",
-                "Recommended Fix": "Reduce layout shifts by reserving space for images, embeds, and dynamic elements."
+                "Recommended Fix": "Reserve space for images/embeds to reduce layout shifts.",
+                "Impact": "Medium - Part of Core Web Vitals"
             })
 
     if not fixes:
         fixes.append({
-            "Priority": "Low",
+            "Priority": "✅ EXCELLENT",
             "Issue": "No major issues detected",
-            "Recommended Fix": "Maintain current optimization and monitor competitors."
+            "Recommended Fix": "Maintain current optimization and monitor competitors regularly.",
+            "Impact": "Keep tracking performance"
         })
 
     return fixes
 
 
-st.set_page_config(page_title="Venue SEO Intelligence Dashboard", layout="wide")
+# ==================== PAGE CONFIG ====================
 
-st.title("Venue SEO Intelligence Dashboard")
-
-url = st.text_input("Enter Primary Venue URL")
-keyword = st.text_input("Enter Target Keyword")
-compare_url = st.text_input("Enter Comparison Venue URL (optional)")
-pagespeed_api_key = st.text_input("Enter Google PageSpeed API Key", type="password")
-serp_key = st.text_input("Enter SERPER API Key", type="password")
-gemini_api_key = st.text_input("Enter Gemini API Key", type="password")
-
-st.subheader("Multi-Venue Leaderboard")
-venue_urls_text = st.text_area(
-    "Enter multiple venue URLs (one per line)",
-    height=150
+st.set_page_config(
+    page_title="SEO Intelligence Dashboard",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-col_a, col_b = st.columns(2)
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main > div {
+        padding-top: 2rem;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
+        height: 3em;
+        font-weight: 600;
+    }
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        color: white;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    h1 {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 3em;
+        font-weight: 800;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 10px 20px;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-with col_a:
-    analyze_clicked = st.button("Analyze")
+# ==================== HEADER ====================
 
-with col_b:
-    competitors_clicked = st.button("Find Competitors")
+st.title("🎯 SEO Intelligence Dashboard")
+st.markdown("**Analyze, benchmark, and optimize your website's search performance**")
+st.markdown("---")
+
+# ==================== INPUT SECTION ====================
+
+col1, col2 = st.columns(2)
+
+with col1:
+    url = st.text_input("🌐 Primary Venue URL", placeholder="https://example.com")
+    keyword = st.text_input("🔑 Target Keyword", placeholder="mini golf auckland")
+
+with col2:
+    compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
+    
+# API Keys in expander
+with st.expander("⚙️ API Configuration", expanded=False):
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        pagespeed_api_key = st.text_input("PageSpeed API Key", type="password")
+    with col_b:
+        serp_key = st.text_input("SERPER API Key", type="password")
+    with col_c:
+        gemini_api_key = st.text_input("Gemini API Key", type="password")
+
+st.markdown("### 🏆 Multi-Venue Leaderboard")
+venue_urls_text = st.text_area(
+    "Enter multiple venue URLs (one per line)",
+    height=100,
+    placeholder="https://venue1.com\nhttps://venue2.com\nhttps://venue3.com"
+)
+
+st.markdown("---")
+
+# Action Buttons
+col_btn1, col_btn2, col_btn3 = st.columns([2, 2, 3])
+
+with col_btn1:
+    analyze_clicked = st.button("🔍 Analyze SEO", use_container_width=True, type="primary")
+
+with col_btn2:
+    competitors_clicked = st.button("🎯 Find Competitors", use_container_width=True)
+
+# ==================== ANALYZE SECTION ====================
 
 if analyze_clicked:
     if url and keyword:
         try:
+            # Progress tracking
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text("📄 Fetching page content...")
+            progress_bar.progress(20)
+            time.sleep(0.3)
+            
             st.session_state.keyword = keyword
             st.session_state.url = url
 
             soup, raw_html = get_page_soup(url)
+
+            status_text.text("🔍 Extracting SEO elements...")
+            progress_bar.progress(40)
+            time.sleep(0.3)
 
             title = get_title(soup)
             meta = get_meta_description(soup)
@@ -168,6 +371,18 @@ if analyze_clicked:
 
             title_len = title_length(title)
             meta_len = meta_description_length(meta)
+            
+            # Technical SEO checks
+            status_text.text("⚙️ Running technical SEO audit...")
+            progress_bar.progress(60)
+            time.sleep(0.3)
+            
+            tech_seo = check_technical_seo(url, soup)
+            has_schema = has_schema_markup(soup)
+
+            status_text.text("📊 Calculating SEO score...")
+            progress_bar.progress(80)
+            time.sleep(0.3)
 
             score, recs = calculate_seo_score(
                 title,
@@ -180,7 +395,12 @@ if analyze_clicked:
                 meta_has_keyword,
                 h1_has_keyword,
                 title_len,
-                meta_len
+                meta_len,
+                internal_links_count=len(internal),
+                external_links_count=len(external),
+                has_schema=has_schema,
+                https_enabled=tech_seo.get('https_enabled', False),
+                mobile_viewport=tech_seo.get('mobile_viewport', False)
             )
 
             summary = get_executive_summary(
@@ -193,9 +413,11 @@ if analyze_clicked:
             pagespeed_data = None
             if pagespeed_api_key:
                 try:
+                    status_text.text("⚡ Fetching PageSpeed data...")
+                    progress_bar.progress(90)
                     pagespeed_data = get_pagespeed_data(url, pagespeed_api_key, strategy="mobile")
                 except Exception as ps_error:
-                    st.warning(f"PageSpeed API error: {ps_error}")
+                    st.warning(f"PageSpeed API: {ps_error}")
 
             recommended_fixes = build_recommended_fixes(
                 title_has_keyword=title_has_keyword,
@@ -205,446 +427,468 @@ if analyze_clicked:
                 title_len=title_len,
                 meta_len=meta_len,
                 missing_alt_count=len(missing_alt),
-                pagespeed_data=pagespeed_data
+                pagespeed_data=pagespeed_data,
+                https_enabled=tech_seo.get('https_enabled', False),
+                mobile_viewport=tech_seo.get('mobile_viewport', False),
+                has_schema=has_schema
             )
 
-            st.subheader("Executive Summary")
-            st.write("**Overall Status:**", summary["Overall Status"])
-            st.write("**Top Issue:**", summary["Top Issue"])
-            st.write("**Strongest Area:**", summary["Strongest Area"])
-            st.write("**Priority Action:**", summary["Priority Action"])
+            progress_bar.progress(100)
+            status_text.text("✅ Analysis complete!")
+            time.sleep(0.5)
+            progress_bar.empty()
+            status_text.empty()
 
-            st.subheader("SEO Overview")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("SEO Score", f"{score}/100")
-            col2.metric("Word Count", wc)
-            col3.metric("Keyword Density", f"{kd}%")
+            # ==================== DISPLAY RESULTS ====================
+            
+            st.success("✅ Analysis Complete!")
+            st.markdown("---")
 
-            tab1, tab2, tab3 = st.tabs(
-                ["Technical SEO", "Content Analysis", "Comparison"]
-            )
+            # Tabs for organized display
+            tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🔧 Technical SEO", "📝 Content Analysis", "🎯 Recommendations"])
 
             with tab1:
-                st.subheader("Technical SEO")
-                st.write("**Title:**", title)
-                st.write("**Title Length:**", title_len)
-                st.write("**Meta Description:**", meta)
-                st.write("**Meta Description Length:**", meta_len)
-                st.write("**H1 Tags:**", h1)
-                st.write("**Internal Links:**", len(internal))
-                st.write("**External Links:**", len(external))
-                st.write("**Images Missing Alt:**", len(missing_alt))
-
-                if pagespeed_data:
-                    st.subheader("PageSpeed Insights (Mobile)")
-
-                    ps_col1, ps_col2, ps_col3, ps_col4 = st.columns(4)
-
-                    performance_score = pagespeed_data["performance_score"]
-                    accessibility_score = pagespeed_data["accessibility_score"]
-                    best_practices_score = pagespeed_data["best_practices_score"]
-                    seo_score_api = pagespeed_data["seo_score"]
-
-                    ps_col1.metric(
-                        "Performance",
-                        f"{int(performance_score * 100) if performance_score is not None else 'N/A'}"
-                    )
-                    ps_col2.metric(
-                        "Accessibility",
-                        f"{int(accessibility_score * 100) if accessibility_score is not None else 'N/A'}"
-                    )
-                    ps_col3.metric(
-                        "Best Practices",
-                        f"{int(best_practices_score * 100) if best_practices_score is not None else 'N/A'}"
-                    )
-                    ps_col4.metric(
-                        "SEO (PageSpeed)",
-                        f"{int(seo_score_api * 100) if seo_score_api is not None else 'N/A'}"
-                    )
-
-                    st.write("**First Contentful Paint:**", pagespeed_data["first_contentful_paint"])
-                    st.write("**Largest Contentful Paint:**", pagespeed_data["largest_contentful_paint"])
-                    st.write("**Speed Index:**", pagespeed_data["speed_index"])
-                    st.write("**Total Blocking Time:**", pagespeed_data["total_blocking_time"])
-                    st.write("**Cumulative Layout Shift:**", pagespeed_data["cumulative_layout_shift"])
+                # Score Gauge + Key Metrics
+                col_gauge, col_metrics = st.columns([2, 3])
+                
+                with col_gauge:
+                    st.plotly_chart(create_score_gauge(score), use_container_width=True)
+                    st.markdown(f"**Score Band:** {get_score_band(score)}")
+                
+                with col_metrics:
+                    st.markdown("### 📈 Key Metrics")
+                    
+                    metric_col1, metric_col2 = st.columns(2)
+                    
+                    with metric_col1:
+                        st.metric("📝 Word Count", f"{wc:,}")
+                        st.metric("🔑 Keyword Count", kc)
+                        st.metric("🔗 Internal Links", len(internal))
+                    
+                    with metric_col2:
+                        st.metric("📊 Keyword Density", f"{kd}%")
+                        st.metric("🖼️ Missing ALT Tags", len(missing_alt))
+                        st.metric("🌐 External Links", len(external))
+                
+                # Executive Summary
+                st.markdown("### 📋 Executive Summary")
+                summary_cols = st.columns(4)
+                
+                with summary_cols[0]:
+                    st.info(f"**Status**\n\n{summary['Overall Status']}")
+                with summary_cols[1]:
+                    st.warning(f"**Top Issue**\n\n{summary['Top Issue']}")
+                with summary_cols[2]:
+                    st.success(f"**Strength**\n\n{summary['Strongest Area']}")
+                with summary_cols[3]:
+                    st.error(f"**Priority**\n\n{summary['Priority Action']}")
 
             with tab2:
-                st.subheader("Content Analysis")
-                st.write("**Target Keyword:**", keyword)
-                st.write("**Exact Keyword Count:**", kc)
-                st.write("**Exact Keyword Density:**", f"{kd}%")
-                st.write("**Partial Match Total:**", partial_match_total)
-                st.write("**Keyword Token Coverage:**", f"{token_coverage}%")
-                st.write("**Token Counts:**", token_counts)
-                st.write("**Keyword in Title:**", "Yes" if title_has_keyword else "No")
-                st.write("**Keyword in Meta Description:**", "Yes" if meta_has_keyword else "No")
-                st.write("**Keyword in H1:**", "Yes" if h1_has_keyword else "No")
-                st.write("**Word Count:**", wc)
-
-                st.subheader("Auto-Recommended SEO Fixes")
-                fixes_df = pd.DataFrame(recommended_fixes)
-                st.dataframe(fixes_df, use_container_width=True)
-
-                st.subheader("Recommendations")
-                if recs:
-                    for r in recs:
-                        st.write("-", r)
-                else:
-                    st.success("No major SEO issues found.")
+                st.markdown("### 🔧 Technical SEO Audit")
+                
+                tech_col1, tech_col2 = st.columns(2)
+                
+                with tech_col1:
+                    st.markdown("#### Security & Protocol")
+                    st.markdown(status_indicator(tech_seo.get('https_enabled', False), "HTTPS Enabled"), unsafe_allow_html=True)
+                    st.markdown(status_indicator(tech_seo.get('has_canonical', False), "Canonical URL"), unsafe_allow_html=True)
+                    st.markdown(status_indicator(not tech_seo.get('robots_noindex', True), "Indexable (No noindex)"), unsafe_allow_html=True)
+                    
+                    st.markdown("#### Structured Data")
+                    st.markdown(status_indicator(has_schema, "Schema Markup"), unsafe_allow_html=True)
+                    if has_schema:
+                        schemas = detect_schema_markup(soup)
+                        if schemas['json_ld']:
+                            st.info(f"**JSON-LD Types:** {', '.join(schemas['json_ld'])}")
+                
+                with tech_col2:
+                    st.markdown("#### Mobile & Accessibility")
+                    st.markdown(status_indicator(tech_seo.get('mobile_viewport', False), "Mobile Viewport"), unsafe_allow_html=True)
+                    st.markdown(status_indicator(tech_seo.get('has_lang', False), "Language Attribute"), unsafe_allow_html=True)
+                    st.markdown(status_indicator(tech_seo.get('proper_h1_usage', False), "Single H1 Tag"), unsafe_allow_html=True)
+                    
+                    st.markdown("#### Social Media")
+                    st.markdown(status_indicator(tech_seo.get('has_og_title', False), "Open Graph Title"), unsafe_allow_html=True)
+                    st.markdown(status_indicator(tech_seo.get('has_twitter_card', False), "Twitter Card"), unsafe_allow_html=True)
 
             with tab3:
-                st.subheader("Comparison")
+                st.markdown("### 📝 Content Analysis")
+                
+                content_col1, content_col2 = st.columns(2)
+                
+                with content_col1:
+                    st.markdown("#### On-Page Elements")
+                    st.text_input("Title", value=title, disabled=True)
+                    st.text_area("Meta Description", value=meta, height=80, disabled=True)
+                    st.text_input("H1 Tags", value=", ".join(h1) if h1 else "None", disabled=True)
+                    
+                with content_col2:
+                    st.markdown("#### Keyword Analysis")
+                    st.markdown(f"**Keyword in Title:** {'✅ Yes' if title_has_keyword else '❌ No'}")
+                    st.markdown(f"**Keyword in Meta:** {'✅ Yes' if meta_has_keyword else '❌ No'}")
+                    st.markdown(f"**Keyword in H1:** {'✅ Yes' if h1_has_keyword else '❌ No'}")
+                    st.markdown(f"**Token Coverage:** {token_coverage}%")
+                    
+                    if token_counts:
+                        st.markdown("**Individual Token Counts:**")
+                        for token, count in token_counts.items():
+                            st.markdown(f"- *{token}*: {count} times")
 
-                if compare_url:
-                    compare_soup, compare_raw_html = get_page_soup(compare_url)
+            with tab4:
+                st.markdown("### 🎯 Recommended Actions")
+                
+                # Group recommendations by priority
+                critical = [r for r in recommended_fixes if "CRITICAL" in r['Priority']]
+                high = [r for r in recommended_fixes if "HIGH" in r['Priority']]
+                medium = [r for r in recommended_fixes if "MEDIUM" in r['Priority']]
+                excellent = [r for r in recommended_fixes if "EXCELLENT" in r['Priority']]
+                
+                if critical:
+                    with st.expander(f"🔴 CRITICAL Issues ({len(critical)})", expanded=True):
+                        for rec in critical:
+                            st.error(f"**{rec['Issue']}**\n\n💡 {rec['Recommended Fix']}\n\n📊 Impact: {rec['Impact']}")
+                
+                if high:
+                    with st.expander(f"🟠 HIGH Priority ({len(high)})", expanded=False):
+                        for rec in high:
+                            st.warning(f"**{rec['Issue']}**\n\n💡 {rec['Recommended Fix']}\n\n📊 Impact: {rec['Impact']}")
+                
+                if medium:
+                    with st.expander(f"🟡 MEDIUM Priority ({len(medium)})", expanded=False):
+                        for rec in medium:
+                            st.info(f"**{rec['Issue']}**\n\n💡 {rec['Recommended Fix']}\n\n📊 Impact: {rec['Impact']}")
+                
+                if excellent:
+                    with st.expander(f"✅ Status: Excellent", expanded=False):
+                        for rec in excellent:
+                            st.success(f"**{rec['Issue']}**\n\n{rec['Recommended Fix']}")
 
-                    compare_title = get_title(compare_soup)
-                    compare_meta = get_meta_description(compare_soup)
-                    compare_h1 = get_h1_tags(compare_soup)
-                    compare_text = get_text_content(compare_soup)
+            # PageSpeed Section (if available)
+            if pagespeed_data:
+                st.markdown("---")
+                st.markdown("### ⚡ PageSpeed Insights (Mobile)")
+                
+                ps_cols = st.columns(4)
+                
+                with ps_cols[0]:
+                    perf_score = int(pagespeed_data.get("performance_score", 0) * 100)
+                    st.metric("Performance", f"{perf_score}/100")
+                
+                with ps_cols[1]:
+                    acc_score = int(pagespeed_data.get("accessibility_score", 0) * 100)
+                    st.metric("Accessibility", f"{acc_score}/100")
+                
+                with ps_cols[2]:
+                    bp_score = int(pagespeed_data.get("best_practices_score", 0) * 100)
+                    st.metric("Best Practices", f"{bp_score}/100")
+                
+                with ps_cols[3]:
+                    seo_score = int(pagespeed_data.get("seo_score", 0) * 100)
+                    st.metric("SEO", f"{seo_score}/100")
+                
+                st.markdown("**Core Web Vitals:**")
+                vital_cols = st.columns(5)
+                
+                with vital_cols[0]:
+                    st.text(f"FCP: {pagespeed_data.get('first_contentful_paint', 'N/A')}")
+                with vital_cols[1]:
+                    st.text(f"LCP: {pagespeed_data.get('largest_contentful_paint', 'N/A')}")
+                with vital_cols[2]:
+                    st.text(f"SI: {pagespeed_data.get('speed_index', 'N/A')}")
+                with vital_cols[3]:
+                    st.text(f"TBT: {pagespeed_data.get('total_blocking_time', 'N/A')}")
+                with vital_cols[4]:
+                    st.text(f"CLS: {pagespeed_data.get('cumulative_layout_shift', 'N/A')}")
 
-                    compare_wc = count_words(compare_text)
-                    compare_kc = count_keyword(compare_text, keyword)
-                    compare_kd = keyword_density(compare_text, keyword)
-
-                    compare_internal, compare_external = get_links(compare_soup, compare_url)
-                    compare_missing_alt = get_images_missing_alt(compare_soup)
-
-                    compare_title_has_keyword = keyword_in_title(compare_title, keyword)
-                    compare_meta_has_keyword = keyword_in_meta(compare_meta, keyword)
-                    compare_h1_has_keyword = keyword_in_h1(compare_h1, keyword)
-
-                    compare_title_len = title_length(compare_title)
-                    compare_meta_len = meta_description_length(compare_meta)
-
-                    compare_score, compare_recs = calculate_seo_score(
-                        compare_title,
-                        compare_meta,
-                        compare_h1,
-                        compare_kc,
-                        compare_wc,
-                        len(compare_missing_alt),
-                        compare_title_has_keyword,
-                        compare_meta_has_keyword,
-                        compare_h1_has_keyword,
-                        compare_title_len,
-                        compare_meta_len
+            # Comparison Section (if URL provided)
+            if compare_url:
+                st.markdown("---")
+                st.markdown("### 📊 Side-by-Side Comparison")
+                
+                try:
+                    comp_soup, _ = get_page_soup(compare_url)
+                    comp_title = get_title(comp_soup)
+                    comp_meta = get_meta_description(comp_soup)
+                    comp_h1 = get_h1_tags(comp_soup)
+                    comp_text = get_text_content(comp_soup)
+                    comp_wc = count_words(comp_text)
+                    comp_kc = count_keyword(comp_text, keyword)
+                    comp_kd = keyword_density(comp_text, keyword)
+                    comp_internal, comp_external = get_links(comp_soup, compare_url)
+                    comp_missing_alt = get_images_missing_alt(comp_soup)
+                    comp_tech = check_technical_seo(compare_url, comp_soup)
+                    comp_has_schema = has_schema_markup(comp_soup)
+                    
+                    comp_score, _ = calculate_seo_score(
+                        comp_title, comp_meta, comp_h1, comp_kc, comp_wc,
+                        len(comp_missing_alt),
+                        keyword_in_title(comp_title, keyword),
+                        keyword_in_meta(comp_meta, keyword),
+                        keyword_in_h1(comp_h1, keyword),
+                        title_length(comp_title),
+                        meta_description_length(comp_meta),
+                        len(comp_internal), len(comp_external),
+                        comp_has_schema,
+                        comp_tech.get('https_enabled', False),
+                        comp_tech.get('mobile_viewport', False)
                     )
-
-                    st.write("### Score Comparison")
-                    st.write("**Primary Venue Score:**", score)
-                    st.write("**Comparison Venue Score:**", compare_score)
-                    st.write("**Winner:**", compare_metric(score, compare_score))
-
-                    data = {
-                        "Metric": [
-                            "SEO Score",
-                            "Word Count",
-                            "Keyword Count",
-                            "Keyword Density",
-                            "Keyword in Title",
-                            "Keyword in Meta",
-                            "Keyword in H1",
-                            "Internal Links",
-                            "External Links",
-                            "Images Missing ALT"
-                        ],
-                        "Primary Venue": [
-                            str(score),
-                            str(wc),
-                            str(kc),
-                            str(kd),
-                            "Yes" if title_has_keyword else "No",
-                            "Yes" if meta_has_keyword else "No",
-                            "Yes" if h1_has_keyword else "No",
-                            str(len(internal)),
-                            str(len(external)),
-                            str(len(missing_alt))
-                        ],
-                        "Comparison Venue": [
-                            str(compare_score),
-                            str(compare_wc),
-                            str(compare_kc),
-                            str(compare_kd),
-                            "Yes" if compare_title_has_keyword else "No",
-                            "Yes" if compare_meta_has_keyword else "No",
-                            "Yes" if compare_h1_has_keyword else "No",
-                            str(len(compare_internal)),
-                            str(len(compare_external)),
-                            str(len(compare_missing_alt))
+                    
+                    comp_data = {
+                        "Metric": ["SEO Score", "Word Count", "Keyword Count", "Keyword Density", 
+                                  "Internal Links", "External Links", "Missing ALT"],
+                        "Primary Venue": [score, wc, kc, f"{kd}%", len(internal), len(external), len(missing_alt)],
+                        "Comparison Venue": [comp_score, comp_wc, comp_kc, f"{comp_kd}%", 
+                                           len(comp_internal), len(comp_external), len(comp_missing_alt)],
+                        "Winner": [
+                            compare_metric(score, comp_score),
+                            compare_metric(wc, comp_wc),
+                            compare_metric(kc, comp_kc),
+                            compare_metric(kd, comp_kd),
+                            compare_metric(len(internal), len(comp_internal)),
+                            compare_metric(len(external), len(comp_external)),
+                            compare_metric(len(missing_alt), len(comp_missing_alt), higher_is_better=False)
                         ]
                     }
+                    
+                    st.dataframe(pd.DataFrame(comp_data), use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Error analyzing comparison URL: {e}")
 
-                    df = pd.DataFrame(data)
-                    st.dataframe(df, use_container_width=True)
-
-                    chart_data = pd.DataFrame({
-                        "Venue": ["Primary Venue", "Comparison Venue"],
-                        "SEO Score": [score, compare_score]
-                    })
-
-                    fig = px.bar(
-                        chart_data,
-                        x="Venue",
-                        y="SEO Score",
-                        color="Venue",
-                        text="SEO Score"
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-                else:
-                    st.info("Add a comparison venue URL to compare two venues.")
-
+            # Multi-Venue Leaderboard
             if venue_urls_text.strip():
-                st.subheader("Leaderboard Results")
-
-                venue_urls = [
-                    line.strip()
-                    for line in venue_urls_text.split("\n")
-                    if line.strip()
-                ]
-
-                leaderboard_rows = []
-
-                for venue_url in venue_urls:
-                    try:
-                        result = analyze_venue(venue_url, keyword)
-                        leaderboard_rows.append(result)
-                    except Exception as venue_error:
-                        leaderboard_rows.append({
-                            "Venue Name": venue_url,
-                            "URL": f"Error: {venue_error}",
-                            "SEO Score": 0,
-                            "Score Band": "Error",
-                            "Word Count": 0,
-                            "Keyword Count": 0,
-                            "Keyword Density": 0,
-                            "Internal Links": 0,
-                            "External Links": 0,
-                            "Images Missing ALT": 0
-                        })
-
-                leaderboard_df = pd.DataFrame(leaderboard_rows)
-                leaderboard_df = leaderboard_df.sort_values(
-                    by="SEO Score",
-                    ascending=False
-                ).reset_index(drop=True)
-
-                leaderboard_df.index = leaderboard_df.index + 1
-                leaderboard_df.index.name = "Rank"
-
-                st.dataframe(leaderboard_df, use_container_width=True)
-
-                csv = leaderboard_df.to_csv(index=True).encode("utf-8")
-                st.download_button(
-                    label="Download Leaderboard CSV",
-                    data=csv,
-                    file_name="venue_seo_leaderboard.csv",
-                    mime="text/csv"
-                )
-
-                leaderboard_chart = px.bar(
-                    leaderboard_df.reset_index(),
-                    x="Venue Name",
-                    y="SEO Score",
-                    color="Score Band",
-                    text="SEO Score"
-                )
-
-                st.plotly_chart(leaderboard_chart, use_container_width=True)
+                st.markdown("---")
+                st.markdown("### 🏆 Multi-Venue Leaderboard")
+                
+                venue_urls = [u.strip() for u in venue_urls_text.strip().split("\n") if u.strip()]
+                
+                if venue_urls:
+                    leaderboard_progress = st.progress(0)
+                    leaderboard_rows = []
+                    
+                    for idx, venue_url in enumerate(venue_urls):
+                        try:
+                            leaderboard_progress.progress((idx + 1) / len(venue_urls))
+                            venue_data = analyze_venue(venue_url, keyword)
+                            leaderboard_rows.append(venue_data)
+                        except Exception:
+                            st.warning(f"Could not analyze: {venue_url}")
+                    
+                    leaderboard_progress.empty()
+                    
+                    if leaderboard_rows:
+                        leaderboard_df = pd.DataFrame(leaderboard_rows)
+                        leaderboard_df = leaderboard_df.sort_values(by="SEO Score", ascending=False)
+                        
+                        st.dataframe(leaderboard_df, use_container_width=True)
+                        
+                        chart = px.bar(
+                            leaderboard_df.reset_index(),
+                            x="Venue Name",
+                            y="SEO Score",
+                            color="Score Band",
+                            text="SEO Score",
+                            title="Venue SEO Score Comparison"
+                        )
+                        
+                        st.plotly_chart(chart, use_container_width=True)
 
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"❌ Analysis Error: {e}")
+            st.info("Please check the URL is valid and accessible.")
     else:
-        st.warning("Please enter both primary URL and keyword.")
+        st.warning("⚠️ Please enter both URL and keyword to analyze.")
+
+# ==================== COMPETITORS SECTION ====================
 
 if competitors_clicked:
     if not serp_key:
-        st.error("Please enter your SERPER API key.")
+        st.error("❌ Please enter your SERPER API key.")
     elif not keyword:
-        st.error("Please enter a target keyword first.")
+        st.error("❌ Please enter a target keyword first.")
     else:
         try:
-            st.session_state.keyword = keyword
-            competitors = serp_utils.get_serp_results(st.session_state.keyword, serp_key)
+            with st.spinner('🔍 Discovering competitors from Google SERP...'):
+                st.session_state.keyword = keyword
+                competitors = serp_utils.get_serp_results(st.session_state.keyword, serp_key)
 
             if competitors:
-                st.subheader("Full Google SERP Results")
-
-                full_serp_rows = build_full_serp_table(competitors)
-                full_serp_df = pd.DataFrame(full_serp_rows)
-                st.dataframe(full_serp_df, use_container_width=True)
-
-                st.subheader("Direct Competitors Only")
-
-                direct_competitors = filter_direct_competitors(competitors)
-
-                if direct_competitors:
-                    direct_df = pd.DataFrame(direct_competitors)
-                    st.dataframe(direct_df, use_container_width=True)
-                else:
-                    st.info("No direct competitors detected.")
-
-                st.subheader("Primary Venue + Top 3 Direct Competitors")
-
-                primary_result = get_primary_result(competitors)
-                top3_external = get_top_n_external_direct_competitors(competitors, n=3)
-
-                benchmark_rows = []
-
-                if primary_result:
-                    try:
-                        primary_analysis = analyze_venue(primary_result["Link"], keyword)
-                        primary_analysis["SERP Rank"] = primary_result["SERP Rank"]
-                        primary_analysis["Role"] = "Primary Venue"
-                        benchmark_rows.append(primary_analysis)
-                    except Exception:
-                        benchmark_rows.append({
-                            "Venue Name": primary_result["Title"],
-                            "URL": primary_result["Link"],
-                            "SEO Score": 0,
-                            "Score Band": "Error",
-                            "Word Count": 0,
-                            "Keyword Count": 0,
-                            "Keyword Density": 0,
-                            "Internal Links": 0,
-                            "External Links": 0,
-                            "Images Missing ALT": 0,
-                            "SERP Rank": primary_result["SERP Rank"],
-                            "Role": "Primary Venue"
-                        })
-
-                for item in top3_external:
-                    try:
-                        result = analyze_venue(item["Link"], keyword)
-                        result["SERP Rank"] = item["SERP Rank"]
-                        result["Role"] = "Direct Competitor"
-                        benchmark_rows.append(result)
-                    except Exception:
-                        benchmark_rows.append({
-                            "Venue Name": item["Title"],
-                            "URL": item["Link"],
-                            "SEO Score": 0,
-                            "Score Band": "Error",
-                            "Word Count": 0,
-                            "Keyword Count": 0,
-                            "Keyword Density": 0,
-                            "Internal Links": 0,
-                            "External Links": 0,
-                            "Images Missing ALT": 0,
-                            "SERP Rank": item["SERP Rank"],
-                            "Role": "Direct Competitor"
-                        })
-
-                if benchmark_rows:
-                    benchmark_df = pd.DataFrame(benchmark_rows)
-                    benchmark_df = benchmark_df.sort_values(by="SERP Rank").reset_index(drop=True)
-                    st.dataframe(benchmark_df, use_container_width=True)
-
-                    chart_df = benchmark_df[["Venue Name", "SEO Score", "Role"]].copy()
-
-                    fig = px.bar(
-                        chart_df,
-                        x="Venue Name",
-                        y="SEO Score",
-                        color="Role",
-                        text="SEO Score"
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    primary_rows = [row for row in benchmark_rows if row.get("Role") == "Primary Venue"]
-
-                    if primary_rows:
-                        summary_data = build_benchmark_summary(primary_rows[0], benchmark_rows)
-
-                        st.subheader("Benchmark Summary")
-
-                        c1, c2, c3, c4 = st.columns(4)
-
-                        c1.metric("Primary Venue Rank", f"#{summary_data['primary_rank']}")
-                        c2.metric("Primary SEO Score", summary_data["primary_score"])
-                        c3.metric("Top Competitor", summary_data["top_competitor"])
-                        c4.metric("Biggest Gap", summary_data["gap"])
-
-                        insights = generate_strategic_insights(
-                            primary_row=primary_rows[0],
-                            benchmark_rows=benchmark_rows,
-                            keyword=keyword
-                        )
-
-                        st.subheader("Strategic Insights")
-                        for insight in insights:
-                            st.write("-", insight)
-
-                        primary_name = primary_rows[0].get("Venue Name", "Primary Venue")
-                        primary_rank = primary_rows[0].get("SERP Rank", "N/A")
-                        primary_score = primary_rows[0].get("SEO Score", 0)
-                        top_competitor = summary_data["top_competitor"]
-
-                        primary_fixes = build_recommended_fixes(
-                            title_has_keyword=False,
-                            meta_has_keyword=False,
-                            h1_has_keyword=False,
-                            kc=primary_rows[0].get("Keyword Count", 0),
-                            title_len=50,
-                            meta_len=150,
-                            missing_alt_count=primary_rows[0].get("Images Missing ALT", 0),
-                            pagespeed_data=None
-                        )
-
-                        st.subheader("AI Executive Summary")
-                        ai_summary = generate_ai_executive_summary(
-                            gemini_api_key=gemini_api_key,
-                            primary_name=primary_name,
-                            keyword=keyword,
-                            primary_rank=primary_rank,
-                            primary_score=primary_score,
-                            top_competitor=top_competitor,
-                            strategic_insights=insights,
-                            recommended_fixes=primary_fixes
-                        )
-
-                        if ai_summary:
-                            st.write(ai_summary)
-                        else:
-                            st.info("Enter Gemini API key to generate AI summary.")
-
-                        st.subheader("Keyword Opportunities")
-
-                        primary_text = ""
+                st.success("✅ Competitors discovered!")
+                st.markdown("---")
+                
+                # Tabs for competitor data
+                comp_tab1, comp_tab2, comp_tab3 = st.tabs([
+                    "🔍 All SERP Results",
+                    "🎯 Direct Competitors",
+                    "📊 Benchmark Analysis"
+                ])
+                
+                with comp_tab1:
+                    st.markdown("### Full Google SERP Results")
+                    full_serp_rows = build_full_serp_table(competitors)
+                    full_serp_df = pd.DataFrame(full_serp_rows)
+                    st.dataframe(full_serp_df, use_container_width=True)
+                
+                with comp_tab2:
+                    st.markdown("### Direct Competitors Only")
+                    direct_competitors = filter_direct_competitors(competitors)
+                    
+                    if direct_competitors:
+                        direct_df = pd.DataFrame(direct_competitors)
+                        st.dataframe(direct_df, use_container_width=True)
+                    else:
+                        st.info("No direct competitors detected.")
+                
+                with comp_tab3:
+                    st.markdown("### Primary Venue + Top 3 Direct Competitors")
+                    
+                    primary_result = get_primary_result(competitors)
+                    top3_external = get_top_n_external_direct_competitors(competitors, n=3)
+                    
+                    benchmark_rows = []
+                    
+                    if primary_result:
                         try:
-                            primary_soup, _ = get_page_soup(primary_rows[0]["URL"])
-                            primary_text = get_text_content(primary_soup)
+                            with st.spinner(f"Analyzing primary venue..."):
+                                primary_analysis = analyze_venue(primary_result["Link"], keyword)
+                                primary_analysis["SERP Rank"] = primary_result["SERP Rank"]
+                                primary_analysis["Role"] = "Primary Venue"
+                                benchmark_rows.append(primary_analysis)
                         except Exception:
-                            primary_text = ""
-
-                        competitor_texts = []
-                        for row in benchmark_rows:
-                            if row.get("Role") == "Direct Competitor":
-                                try:
-                                    comp_soup, _ = get_page_soup(row["URL"])
-                                    competitor_texts.append(get_text_content(comp_soup))
-                                except Exception:
-                                    pass
-
-                        opportunities = find_keyword_opportunities(primary_text, competitor_texts)
-
-                        if opportunities:
-                            opp_df = pd.DataFrame(
-                                opportunities,
-                                columns=["Keyword Opportunity", "Competitor Frequency", "Type"]
+                            benchmark_rows.append({
+                                "Venue Name": primary_result["Title"],
+                                "URL": primary_result["Link"],
+                                "SEO Score": 0,
+                                "Score Band": "Error",
+                                "SERP Rank": primary_result["SERP Rank"],
+                                "Role": "Primary Venue"
+                            })
+                    
+                    for idx, item in enumerate(top3_external):
+                        try:
+                            with st.spinner(f"Analyzing competitor {idx+1}/3..."):
+                                result = analyze_venue(item["Link"], keyword)
+                                result["SERP Rank"] = item["SERP Rank"]
+                                result["Role"] = "Direct Competitor"
+                                benchmark_rows.append(result)
+                        except Exception:
+                            benchmark_rows.append({
+                                "Venue Name": item["Title"],
+                                "URL": item["Link"],
+                                "SEO Score": 0,
+                                "Score Band": "Error",
+                                "SERP Rank": item["SERP Rank"],
+                                "Role": "Direct Competitor"
+                            })
+                    
+                    if benchmark_rows:
+                        benchmark_df = pd.DataFrame(benchmark_rows)
+                        benchmark_df = benchmark_df.sort_values(by="SERP Rank").reset_index(drop=True)
+                        
+                        st.dataframe(benchmark_df, use_container_width=True)
+                        
+                        chart_df = benchmark_df[["Venue Name", "SEO Score", "Role"]].copy()
+                        fig = px.bar(
+                            chart_df,
+                            x="Venue Name",
+                            y="SEO Score",
+                            color="Role",
+                            text="SEO Score",
+                            title="Competitive Benchmark"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Insights
+                        primary_rows = [row for row in benchmark_rows if row.get("Role") == "Primary Venue"]
+                        
+                        if primary_rows:
+                            summary_data = build_benchmark_summary(primary_rows[0], benchmark_rows)
+                            
+                            st.markdown("### 📈 Benchmark Summary")
+                            
+                            bench_cols = st.columns(4)
+                            with bench_cols[0]:
+                                st.metric("Primary Rank", f"#{summary_data['primary_rank']}")
+                            with bench_cols[1]:
+                                st.metric("Primary Score", summary_data["primary_score"])
+                            with bench_cols[2]:
+                                st.metric("Top Competitor", summary_data["top_competitor"])
+                            with bench_cols[3]:
+                                st.metric("Gap", summary_data["gap"])
+                            
+                            insights = generate_strategic_insights(
+                                primary_row=primary_rows[0],
+                                benchmark_rows=benchmark_rows,
+                                keyword=keyword
                             )
-                            st.dataframe(opp_df, use_container_width=True)
-                        else:
-                            st.write("No clear keyword opportunities found.")
-
-                else:
-                    st.info("No benchmark rows available.")
+                            
+                            st.markdown("### 💡 Strategic Insights")
+                            for insight in insights:
+                                st.info(f"• {insight}")
+                            
+                            # AI Summary
+                            if gemini_api_key:
+                                st.markdown("### 🤖 AI Executive Summary")
+                                
+                                primary_fixes = build_recommended_fixes(
+                                    title_has_keyword=False,
+                                    meta_has_keyword=False,
+                                    h1_has_keyword=False,
+                                    kc=primary_rows[0].get("Keyword Count", 0),
+                                    title_len=50,
+                                    meta_len=150,
+                                    missing_alt_count=primary_rows[0].get("Images Missing ALT", 0),
+                                    pagespeed_data=None
+                                )
+                                
+                                with st.spinner("🤖 Generating AI insights..."):
+                                    ai_summary = generate_ai_executive_summary(
+                                        gemini_api_key=gemini_api_key,
+                                        primary_name=primary_rows[0].get("Venue Name", "Primary"),
+                                        keyword=keyword,
+                                        primary_rank=primary_rows[0].get("SERP Rank", "N/A"),
+                                        primary_score=primary_rows[0].get("SEO Score", 0),
+                                        top_competitor=summary_data["top_competitor"],
+                                        strategic_insights=insights,
+                                        recommended_fixes=primary_fixes
+                                    )
+                                
+                                if ai_summary:
+                                    st.markdown(ai_summary)
+                            
+                            # Keyword Opportunities
+                            st.markdown("### 🔑 Keyword Opportunities")
+                            
+                            primary_text = ""
+                            try:
+                                primary_soup, _ = get_page_soup(primary_rows[0]["URL"])
+                                primary_text = get_text_content(primary_soup)
+                            except:
+                                pass
+                            
+                            competitor_texts = []
+                            for row in benchmark_rows:
+                                if row.get("Role") == "Direct Competitor":
+                                    try:
+                                        comp_soup, _ = get_page_soup(row["URL"])
+                                        competitor_texts.append(get_text_content(comp_soup))
+                                    except:
+                                        pass
+                            
+                            if primary_text and competitor_texts:
+                                opportunities = find_keyword_opportunities(primary_text, competitor_texts)
+                                
+                                if opportunities:
+                                    opp_df = pd.DataFrame(
+                                        opportunities,
+                                        columns=["Keyword", "Frequency", "Type"]
+                                    )
+                                    st.dataframe(opp_df, use_container_width=True)
+                                else:
+                                    st.info("No keyword opportunities found.")
 
             else:
                 st.warning("No competitor results found.")
 
         except Exception as e:
-            st.error(f"Competitor search error: {e}")
+            st.error(f"❌ Competitor search error: {e}")

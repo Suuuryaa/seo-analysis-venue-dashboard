@@ -23,6 +23,7 @@ from competitor_utils import (
 from benchmark_utils import build_benchmark_summary
 from insight_utils import generate_strategic_insights
 from keyword_opportunity_utils import find_keyword_opportunities
+from location_utils import get_location_from_url, format_location_display
 
 
 # ==================== API KEY CONFIGURATION ====================
@@ -755,9 +756,34 @@ if competitors_clicked:
         st.error("❌ Please enter a target keyword first.")
     else:
         try:
-            with st.spinner('🔍 Discovering competitors from Google SERP...'):
+            # Use progressive search with expansion
+            from competitor_utils import filter_direct_competitors
+            
+            # Create status container for search progression
+            search_status = st.empty()
+            
+            with st.spinner('🔍 Discovering competitors...'):
                 st.session_state.keyword = keyword
-                competitors = serp_utils.get_serp_results(st.session_state.keyword, serp_key)
+                
+                # Progressive search with auto-expansion
+                all_results, direct_competitors_list, search_log, location_msg = serp_utils.progressive_competitor_search(
+                    url=url,
+                    keyword=keyword,
+                    api_key=serp_key,
+                    filter_func=filter_direct_competitors,
+                    min_competitors=5
+                )
+                
+                # Show search progression
+                for log_msg in search_log:
+                    search_status.info(log_msg)
+                    time.sleep(0.3)
+                
+                # Final location message
+                st.success(f"✅ Competitors discovered! {location_msg}")
+                
+                # Use all_results as competitors for backward compatibility
+                competitors = all_results
 
             if competitors:
                 st.success("✅ Competitors discovered!")

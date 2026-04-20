@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import serp_utils
 import time
 from datetime import datetime
+from datetime import datetime, date
 import os
 
 from seo_utils import *
@@ -22,7 +23,6 @@ from competitor_utils import (
 from benchmark_utils import build_benchmark_summary
 from insight_utils import generate_strategic_insights
 from keyword_opportunity_utils import find_keyword_opportunities
-
 
 
 # ==================== API KEY CONFIGURATION ====================
@@ -46,6 +46,23 @@ except (KeyError, FileNotFoundError, AttributeError):
         default_gemini = os.getenv("GEMINI_API_KEY", "")
     except:
         pass
+
+# Use keys directly in background - never expose to UI
+pagespeed_api_key = default_pagespeed
+serp_key = default_serper
+gemini_api_key = default_gemini
+
+# Daily usage limit for demo protection
+DAILY_LIMIT = 50
+
+if 'daily_uses' not in st.session_state:
+    st.session_state.daily_uses = 0
+    st.session_state.last_reset = date.today()
+
+# Reset counter daily
+if st.session_state.last_reset != date.today():
+    st.session_state.daily_uses = 0
+    st.session_state.last_reset = date.today()
 
 
 # ==================== UI HELPER FUNCTIONS ====================
@@ -325,30 +342,12 @@ with col1:
 with col2:
     compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
     
-# API Keys in expander (with pre-filled values from secrets/env)
-with st.expander("⚙️ API Configuration", expanded=False):
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        pagespeed_api_key = st.text_input(
-            "PageSpeed API Key", 
-            value=default_pagespeed,
-            type="password",
-            help="Pre-loaded for demo. Add your own for unlimited usage."
-        )
-    with col_b:
-        serp_key = st.text_input(
-            "SERPER API Key", 
-            value=default_serper,
-            type="password",
-            help="Pre-loaded for demo. Add your own for unlimited usage."
-        )
-    with col_c:
-        gemini_api_key = st.text_input(
-            "Gemini API Key", 
-            value=default_gemini,
-            type="password",
-            help="Pre-loaded for demo. Add your own for unlimited usage."
-        )
+
+with col2:
+    compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
+
+# Show usage info instead of API configuration
+st.info(f"💡 Demo mode: {DAILY_LIMIT - st.session_state.daily_uses} analyses remaining today")
 
 st.markdown("### 🏆 Multi-Venue Leaderboard")
 venue_urls_text = st.text_area(
@@ -370,7 +369,16 @@ with col_btn2:
 
 # ==================== ANALYZE SECTION ====================
 
+
+# ==================== ANALYZE SECTION ====================
+
 if analyze_clicked:
+    # Check daily limit
+    if st.session_state.daily_uses >= DAILY_LIMIT:
+        st.error(f"📊 Daily demo limit reached ({DAILY_LIMIT} analyses/day). Please try again tomorrow!")
+        st.info("💡 Want unlimited usage? This is a portfolio demo with usage limits to protect API costs.")
+        st.stop()
+    
     if url and keyword:
         try:
             # Progress tracking
@@ -478,6 +486,9 @@ if analyze_clicked:
             time.sleep(0.5)
             progress_bar.empty()
             status_text.empty()
+
+            # Increment usage counter after successful analysis
+            st.session_state.daily_uses += 1
 
             # ==================== DISPLAY RESULTS ====================
             

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import serp_utils
 import time
 from datetime import datetime
+import os
 
 from seo_utils import *
 from scoring import calculate_seo_score, get_score_band
@@ -21,6 +22,30 @@ from competitor_utils import (
 from benchmark_utils import build_benchmark_summary
 from insight_utils import generate_strategic_insights
 from keyword_opportunity_utils import find_keyword_opportunities
+
+
+
+# ==================== API KEY CONFIGURATION ====================
+# Load from Streamlit secrets (cloud) or .env (local development)
+default_pagespeed = ""
+default_serper = ""
+default_gemini = ""
+
+try:
+    # Try Streamlit Cloud secrets first
+    default_pagespeed = st.secrets["PAGESPEED_API_KEY"]
+    default_serper = st.secrets["SERPER_API_KEY"]
+    default_gemini = st.secrets["GEMINI_API_KEY"]
+except (KeyError, FileNotFoundError, AttributeError):
+    # Fall back to .env file for local development
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        default_pagespeed = os.getenv("PAGESPEED_API_KEY", "")
+        default_serper = os.getenv("SERPER_API_KEY", "")
+        default_gemini = os.getenv("GEMINI_API_KEY", "")
+    except:
+        pass
 
 
 # ==================== UI HELPER FUNCTIONS ====================
@@ -300,15 +325,30 @@ with col1:
 with col2:
     compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
     
-# API Keys in expander
+# API Keys in expander (with pre-filled values from secrets/env)
 with st.expander("⚙️ API Configuration", expanded=False):
     col_a, col_b, col_c = st.columns(3)
     with col_a:
-        pagespeed_api_key = st.text_input("PageSpeed API Key", type="password")
+        pagespeed_api_key = st.text_input(
+            "PageSpeed API Key", 
+            value=default_pagespeed,
+            type="password",
+            help="Pre-loaded for demo. Add your own for unlimited usage."
+        )
     with col_b:
-        serp_key = st.text_input("SERPER API Key", type="password")
+        serp_key = st.text_input(
+            "SERPER API Key", 
+            value=default_serper,
+            type="password",
+            help="Pre-loaded for demo. Add your own for unlimited usage."
+        )
     with col_c:
-        gemini_api_key = st.text_input("Gemini API Key", type="password")
+        gemini_api_key = st.text_input(
+            "Gemini API Key", 
+            value=default_gemini,
+            type="password",
+            help="Pre-loaded for demo. Add your own for unlimited usage."
+        )
 
 st.markdown("### 🏆 Multi-Venue Leaderboard")
 venue_urls_text = st.text_area(

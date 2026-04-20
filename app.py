@@ -341,10 +341,6 @@ with col1:
 
 with col2:
     compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
-    
-
-with col2:
-    compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
 
 # Show usage info instead of API configuration
 st.info(f"💡 Demo mode: {DAILY_LIMIT - st.session_state.daily_uses} analyses remaining today")

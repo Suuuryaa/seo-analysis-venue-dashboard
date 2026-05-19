@@ -110,6 +110,11 @@ def progressive_competitor_search(url, keyword, api_key, filter_func, min_compet
         search_log.append(f"🤖 Asking AI: who are local competitors of {domain} for '{keyword}'?")
         try:
             gemini_competitors = get_competitors_via_gemini(url, keyword, gemini_api_key, location)
+        except RuntimeError as e:
+            if "spending cap" in str(e).lower() or "429" in str(e):
+                raise  # Propagate spending cap to app for clear user message
+            search_log.append(f"⚠️ AI lookup failed ({e}), falling back to search...")
+            gemini_competitors = []
         except Exception as e:
             search_log.append(f"⚠️ AI lookup failed ({e}), falling back to search...")
             gemini_competitors = []

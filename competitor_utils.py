@@ -249,6 +249,8 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
             )
             try:
                 resp = _req.post(endpoint, json=payload, timeout=30)
+                if resp.status_code == 429:
+                    raise RuntimeError("SPENDING_CAP_429")
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -257,9 +259,18 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
                         text = parts[1] if len(parts) > 1 else parts[0]
                         if text.startswith("json"):
                             text = text[4:]
-                    competitors = json.loads(text.strip())
-                    return competitors if isinstance(competitors, list) else []
+                    try:
+                        competitors = json.loads(text.strip())
+                        return competitors if isinstance(competitors, list) else []
+                    except json.JSONDecodeError:
+                        # Truncated response — likely spending cap
+                        last_error = f"{model}/{api_ver} → truncated JSON (spending cap?)"
+                        continue
                 last_error = f"{model}/{api_ver} → {resp.status_code}: {resp.text[:200]}"
+            except RuntimeError as e:
+                if "SPENDING_CAP_429" in str(e):
+                    raise RuntimeError("spending cap reached — 429")
+                last_error = f"{model}/{api_ver} → {e}"
             except Exception as e:
                 last_error = f"{model}/{api_ver} → {e}"
 

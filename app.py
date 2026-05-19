@@ -148,6 +148,94 @@ def priority_badge(priority):
     return f"<span style='{style}'>{priority}</span>"
 
 
+def create_radar_chart(categories, values, title="SEO Factors"):
+    """Radar/spider chart for multi-factor SEO breakdown."""
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values + [values[0]],
+        theta=categories + [categories[0]],
+        fill='toself',
+        fillcolor='rgba(102,126,234,0.25)',
+        line=dict(color='#667eea', width=2),
+        marker=dict(size=6, color='#667eea'),
+        name='Score'
+    ))
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], tickfont=dict(size=9), gridcolor='rgba(255,255,255,0.1)'),
+            angularaxis=dict(tickfont=dict(size=11, color='white'), gridcolor='rgba(255,255,255,0.1)'),
+            bgcolor='rgba(0,0,0,0)'
+        ),
+        showlegend=False,
+        title=dict(text=title, font=dict(size=14, color='white'), x=0.5),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=320,
+        margin=dict(l=40, r=40, t=50, b=20),
+    )
+    return fig
+
+
+def create_donut_chart(labels, values, colors, title="", center_text=""):
+    """Clean donut chart like the dashboard screenshots."""
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.65,
+        marker=dict(colors=colors, line=dict(color='rgba(0,0,0,0)', width=0)),
+        textinfo='none',
+        hovertemplate='%{label}: %{value}<extra></extra>'
+    ))
+    fig.add_annotation(
+        text=center_text, x=0.5, y=0.5, font=dict(size=18, color='white', family='Arial Black'),
+        showarrow=False, align='center'
+    )
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=13, color='white'), x=0.5),
+        showlegend=True,
+        legend=dict(font=dict(size=10, color='white'), orientation='v', x=1.02, y=0.5),
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=280,
+        margin=dict(l=10, r=120, t=40, b=10),
+    )
+    return fig
+
+
+def create_horizontal_bar(labels, values, colors=None, title=""):
+    """Horizontal bar chart for factor scoring."""
+    if colors is None:
+        colors = ['#667eea' if v >= 70 else '#FFA726' if v >= 50 else '#EF5350' for v in values]
+    fig = go.Figure(go.Bar(
+        y=labels, x=values, orientation='h',
+        marker=dict(color=colors, line=dict(width=0)),
+        text=[f"{v}" for v in values],
+        textposition='outside',
+        textfont=dict(color='white', size=11)
+    ))
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=13, color='white'), x=0),
+        xaxis=dict(range=[0, 115], showgrid=True, gridcolor='rgba(255,255,255,0.08)', tickfont=dict(color='white')),
+        yaxis=dict(tickfont=dict(size=11, color='white')),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=max(220, len(labels) * 42),
+        margin=dict(l=10, r=60, t=40, b=20),
+        bargap=0.35,
+    )
+    return fig
+
+
+def kpi_card_html(label, value, color="#667eea", icon="📊", delta=None):
+    delta_html = f"<div class='kpi-delta' style='color:{color}'>{delta}</div>" if delta else ""
+    return f"""
+    <div class='kpi-card'>
+        <div style='font-size:1.5rem'>{icon}</div>
+        <div class='kpi-value' style='color:{color}'>{value}</div>
+        <div class='kpi-label'>{label}</div>
+        {delta_html}
+    </div>"""
+
+
 def build_recommended_fixes(
     title_has_keyword,
     meta_has_keyword,
@@ -290,39 +378,37 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
-    .main > div {
-        padding-top: 2rem;
-    }
+    .main > div { padding-top: 1.5rem; }
     .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        height: 3em;
-        font-weight: 600;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        color: white;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        width: 100%; border-radius: 8px; height: 3em; font-weight: 600;
     }
     h1 {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 3em;
-        font-weight: 800;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        font-size: 2.8em; font-weight: 800;
     }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; }
     .stTabs [data-baseweb="tab"] {
-        border-radius: 8px 8px 0 0;
-        padding: 10px 20px;
-        font-weight: 600;
+        border-radius: 8px 8px 0 0; padding: 10px 18px; font-weight: 600;
+    }
+    .kpi-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 1.2rem 1rem;
+        text-align: center;
+        transition: transform 0.2s;
+    }
+    .kpi-card:hover { transform: translateY(-2px); }
+    .kpi-value { font-size: 2rem; font-weight: 800; margin: 0.3rem 0; }
+    .kpi-label { font-size: 0.78rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.05em; }
+    .kpi-delta { font-size: 0.85rem; font-weight: 600; }
+    .section-header {
+        font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em;
+        text-transform: uppercase; opacity: 0.6; margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -503,38 +589,108 @@ if analyze_clicked:
                 with col_gauge:
                     st.plotly_chart(create_score_gauge(score), use_container_width=True)
                     st.markdown(f"**Score Band:** {get_score_band(score)}")
-                
+
                 with col_metrics:
-                    st.markdown("### 📈 Key Metrics")
-                    
-                    metric_col1, metric_col2 = st.columns(2)
-                    
-                    with metric_col1:
-                        st.metric("📝 Word Count", f"{wc:,}")
-                        st.metric("🔑 Keyword Count", kc)
-                        st.metric("🔗 Internal Links", len(internal))
-                    
-                    with metric_col2:
-                        st.metric("📊 Keyword Density", f"{kd}%")
-                        st.metric("🖼️ Missing ALT Tags", len(missing_alt))
-                        st.metric("🌐 External Links", len(external))
-                
-                # Executive Summary
-                st.markdown("### 📋 Executive Summary")
-                summary_cols = st.columns(4)
-                
-                with summary_cols[0]:
-                    st.info(f"**Status**\n\n{summary['Overall Status']}")
-                with summary_cols[1]:
-                    st.warning(f"**Top Issue**\n\n{summary['Top Issue']}")
-                with summary_cols[2]:
-                    st.success(f"**Strength**\n\n{summary['Strongest Area']}")
-                with summary_cols[3]:
-                    st.error(f"**Priority**\n\n{summary['Priority Action']}")
+                    # ── KPI cards row ────────────────────────────────────
+                    st.markdown("<div class='section-header'>Key Metrics</div>", unsafe_allow_html=True)
+                    kc1, kc2, kc3 = st.columns(3)
+                    kc1.markdown(kpi_card_html("Word Count", f"{wc:,}", "#667eea", "📝"), unsafe_allow_html=True)
+                    kc2.markdown(kpi_card_html("Keyword Hits", kc, "#00C853" if kc >= 3 else "#EF5350", "🔑"), unsafe_allow_html=True)
+                    kc3.markdown(kpi_card_html("Keyword Density", f"{kd}%", "#FFA726", "📊"), unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    kc4, kc5, kc6 = st.columns(3)
+                    kc4.markdown(kpi_card_html("Internal Links", len(internal), "#26C6DA", "🔗"), unsafe_allow_html=True)
+                    kc5.markdown(kpi_card_html("External Links", len(external), "#AB47BC", "🌐"), unsafe_allow_html=True)
+                    kc6.markdown(kpi_card_html("Missing ALTs", len(missing_alt), "#EF5350" if missing_alt else "#00C853", "🖼️"), unsafe_allow_html=True)
+
+                # ── Row 2: Radar + SEO factors bar + Link donut ──────────
+                st.markdown("---")
+                r2a, r2b, r2c = st.columns([1.1, 1.1, 0.9])
+
+                with r2a:
+                    # Radar chart: on-page SEO factors
+                    radar_cats = ["Title", "Meta", "H1", "Keyword\nDensity", "Word\nCount", "Links", "Schema"]
+                    radar_vals = [
+                        100 if title_has_keyword else 30,
+                        100 if meta_has_keyword else 30,
+                        100 if h1_has_keyword else 30,
+                        min(100, int(kd * 20)) if kd else 0,
+                        min(100, int(wc / 15)),
+                        min(100, len(internal) * 5 + len(external) * 3),
+                        100 if has_schema else 0,
+                    ]
+                    st.plotly_chart(create_radar_chart(radar_cats, radar_vals, "On-Page SEO Factors"), use_container_width=True)
+
+                with r2b:
+                    # Horizontal bar: factor scores
+                    bar_labels = ["Title Tag", "Meta Desc", "H1 Tag", "Keyword Use", "Content Depth", "Alt Text", "Schema"]
+                    bar_vals = [
+                        100 if title_has_keyword else (50 if title_len > 10 else 20),
+                        100 if meta_has_keyword else (50 if meta_len > 50 else 20),
+                        100 if h1_has_keyword else (40 if h1 else 0),
+                        min(100, kc * 15),
+                        min(100, int(wc / 10)),
+                        max(0, 100 - len(missing_alt) * 10),
+                        100 if has_schema else 0,
+                    ]
+                    st.plotly_chart(create_horizontal_bar(bar_labels, bar_vals, title="Factor Scores"), use_container_width=True)
+
+                with r2c:
+                    # Donut: link composition
+                    total_links = len(internal) + len(external) or 1
+                    st.plotly_chart(create_donut_chart(
+                        labels=["Internal", "External"],
+                        values=[len(internal), max(len(external), 1)],
+                        colors=["#667eea", "#26C6DA"],
+                        title="Link Distribution",
+                        center_text=f"{total_links}<br>links"
+                    ), use_container_width=True)
+
+                # ── Row 3: Keyword status donut + executive summary ───────
+                st.markdown("---")
+                r3a, r3b = st.columns([1, 2])
+
+                with r3a:
+                    kw_present = sum([title_has_keyword, meta_has_keyword, h1_has_keyword, kc > 0])
+                    st.plotly_chart(create_donut_chart(
+                        labels=["Title", "Meta", "H1", "Body"],
+                        values=[1 if title_has_keyword else 0, 1 if meta_has_keyword else 0,
+                                1 if h1_has_keyword else 0, 1 if kc > 0 else 0],
+                        colors=["#00C853", "#FFA726", "#667eea", "#26C6DA"],
+                        title="Keyword Placement",
+                        center_text=f"{kw_present}/4<br><span style='font-size:11px'>covered</span>"
+                    ), use_container_width=True)
+
+                with r3b:
+                    st.markdown("<div class='section-header'>Executive Summary</div>", unsafe_allow_html=True)
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        st.info(f"**Status** — {summary['Overall Status']}")
+                        st.success(f"**Strength** — {summary['Strongest Area']}")
+                    with sc2:
+                        st.warning(f"**Top Issue** — {summary['Top Issue']}")
+                        st.error(f"**Priority** — {summary['Priority Action']}")
 
             with tab2:
                 st.markdown("### 🔧 Technical SEO Audit")
-                
+
+                # Technical score bar chart
+                tech_factors = {
+                    "HTTPS": tech_seo.get('https_enabled', False),
+                    "Canonical URL": tech_seo.get('has_canonical', False),
+                    "Indexable": not tech_seo.get('robots_noindex', True),
+                    "Mobile Viewport": tech_seo.get('mobile_viewport', False),
+                    "Language Tag": tech_seo.get('has_lang', False),
+                    "Single H1": tech_seo.get('proper_h1_usage', False),
+                    "Open Graph": tech_seo.get('has_og_title', False),
+                    "Twitter Card": tech_seo.get('has_twitter_card', False),
+                    "Schema Markup": has_schema,
+                }
+                t_labels = list(tech_factors.keys())
+                t_vals = [100 if v else 0 for v in tech_factors.values()]
+                t_colors = ["#00C853" if v else "#EF5350" for v in tech_factors.values()]
+                st.plotly_chart(create_horizontal_bar(t_labels, t_vals, t_colors, "Technical Audit Score (100 = Pass, 0 = Fail)"), use_container_width=True)
+
                 tech_col1, tech_col2 = st.columns(2)
                 
                 with tech_col1:

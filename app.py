@@ -750,219 +750,146 @@ if analyze_clicked:
 # ==================== COMPETITORS SECTION ====================
 
 if competitors_clicked:
-    if not serp_key:
-        st.error("❌ Please enter your SERPER API key.")
-    elif not keyword:
+    if not keyword:
         st.error("❌ Please enter a target keyword first.")
+    elif not url:
+        st.error("❌ Please enter the Primary Venue URL first.")
+    elif not gemini_api_key:
+        st.error("❌ Gemini API key not configured. Add GEMINI_API_KEY to Streamlit secrets.")
     else:
         try:
-            # Use progressive search with expansion
-            from competitor_utils import filter_direct_competitors
-            
-            # Create status container for search progression
-            search_status = st.empty()
-            
-            with st.spinner('🔍 Discovering competitors...'):
-                st.session_state.keyword = keyword
-                
-                # Progressive search with auto-expansion
-                all_results, direct_competitors_list, search_log, location_msg = serp_utils.progressive_competitor_search(
-                    url=url,
-                    keyword=keyword,
-                    api_key=serp_key,
-                    filter_func=filter_direct_competitors,
-                    min_competitors=5,
-                    gemini_api_key=gemini_api_key
+            from competitor_utils import get_competitors_via_gemini
+            from location_utils import get_location_from_url
+
+            st.markdown("---")
+
+            # ── Step 1: Ask Gemini for competitors ──────────────────────────
+            location = get_location_from_url(url)
+            country = location['country_name'] if location and location.get('country_name') else "global"
+
+            with st.spinner(f"🤖 Asking AI: who are the local competitors of {url} for '{keyword}'?"):
+                try:
+                    gemini_competitors = get_competitors_via_gemini(url, keyword, gemini_api_key, location)
+                except Exception as e:
+                    st.error(f"❌ Gemini failed: {e}")
+                    gemini_competitors = []
+
+            if not gemini_competitors:
+                st.warning("⚠️ Gemini returned no competitors. Check your API key or try a different URL.")
+                st.stop()
+
+            st.success(f"✅ AI identified {len(gemini_competitors)} competitors ({country})")
+
+            # ── Step 2: Analyze primary venue ───────────────────────────────
+            st.markdown("### 📊 SEO Score Comparison")
+            st.markdown(f"Analyzing **{url}** and {len(gemini_competitors)} competitors against keyword: **{keyword}**")
+
+            benchmark_rows = []
+            progress = st.progress(0)
+            total = len(gemini_competitors) + 1
+
+            with st.spinner("Analyzing primary venue..."):
+                try:
+                    primary_data = analyze_venue(url, keyword)
+                    primary_data["Role"] = "🏠 Primary Venue"
+                    benchmark_rows.append(primary_data)
+                except Exception as e:
+                    st.warning(f"Could not analyze primary URL: {e}")
+            progress.progress(1 / total)
+
+            # ── Step 3: Analyze each competitor ─────────────────────────────
+            for idx, comp in enumerate(gemini_competitors):
+                comp_url = comp.get("website") or f"https://{comp.get('domain', '')}"
+                comp_name = comp.get("name", comp_url)
+                if not comp_url or comp_url == "https://":
+                    continue
+                with st.spinner(f"Analyzing competitor {idx+1}/{len(gemini_competitors)}: {comp_name}..."):
+                    try:
+                        row = analyze_venue(comp_url, keyword)
+                        row["Role"] = "🎯 Competitor"
+                        benchmark_rows.append(row)
+                    except Exception:
+                        benchmark_rows.append({
+                            "Venue Name": comp_name,
+                            "URL": comp_url,
+                            "SEO Score": 0,
+                            "Score Band": "Error",
+                            "Role": "🎯 Competitor",
+                            "Word Count": 0, "Keyword Count": 0,
+                            "Keyword Density": 0, "Internal Links": 0,
+                            "External Links": 0, "Images Missing ALT": 0,
+                            "HTTPS": "✗", "Schema": "✗"
+                        })
+                progress.progress((idx + 2) / total)
+
+            progress.empty()
+
+            if not benchmark_rows:
+                st.warning("No data to display.")
+                st.stop()
+
+            # ── Step 4: Display score comparison ────────────────────────────
+            benchmark_df = pd.DataFrame(benchmark_rows)
+
+            # Score bar chart — primary highlighted
+            fig = px.bar(
+                benchmark_df,
+                x="Venue Name",
+                y="SEO Score",
+                color="Role",
+                text="SEO Score",
+                color_discrete_map={"🏠 Primary Venue": "#667eea", "🎯 Competitor": "#FF7043"},
+                title=f"SEO Score vs Competitors — keyword: '{keyword}'"
+            )
+            fig.update_traces(textposition="outside")
+            fig.update_layout(xaxis_tickangle=-30, height=420, showlegend=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Summary metrics
+            primary_row = next((r for r in benchmark_rows if "Primary" in r.get("Role", "")), None)
+            if primary_row:
+                best_comp = max(
+                    [r for r in benchmark_rows if "Competitor" in r.get("Role", "")],
+                    key=lambda x: x.get("SEO Score", 0),
+                    default={}
                 )
-                
-                # Show all search log messages
-                search_status.empty()
-                for log_msg in search_log:
-                    st.info(log_msg)
-                
-                # Final location message
-                st.success(f"✅ Competitors discovered! {location_msg}")
-                
-                # Use all_results as competitors for backward compatibility
-                competitors = all_results
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Your SEO Score", primary_row.get("SEO Score", 0))
+                m2.metric("Best Competitor Score", best_comp.get("SEO Score", "N/A"))
+                gap = primary_row.get("SEO Score", 0) - best_comp.get("SEO Score", 0)
+                m3.metric("Gap vs Best", f"{gap:+d}", delta_color="normal")
+                m4.metric("Competitors Analysed", len(gemini_competitors))
 
-            if competitors:
-                st.success("✅ Competitors discovered!")
-                st.markdown("---")
-                
-                # Tabs for competitor data
-                comp_tab1, comp_tab2, comp_tab3 = st.tabs([
-                    "🔍 All SERP Results",
-                    "🎯 Direct Competitors",
-                    "📊 Benchmark Analysis"
-                ])
-                
-                with comp_tab1:
-                    st.markdown("### Full Google SERP Results")
-                    full_serp_rows = build_full_serp_table(competitors, primary_url=url)
-                    full_serp_df = pd.DataFrame(full_serp_rows)
-                    st.dataframe(full_serp_df, use_container_width=True)
+            # Full data table
+            st.markdown("### 📋 Full Comparison Table")
+            display_cols = ["Role", "Venue Name", "URL", "SEO Score", "Score Band",
+                           "Keyword Count", "Word Count", "HTTPS", "Schema"]
+            st.dataframe(benchmark_df[display_cols], use_container_width=True)
 
-                with comp_tab2:
-                    st.markdown("### Direct Competitors Only")
-                    direct_competitors = filter_direct_competitors(competitors, primary_url=url)
+            # ── Step 5: AI Executive Summary ────────────────────────────────
+            if primary_row and gemini_api_key:
+                st.markdown("### 🤖 AI Executive Summary")
+                best_comp_name = best_comp.get("Venue Name", "top competitor") if best_comp else "N/A"
 
-                    if direct_competitors:
-                        direct_df = pd.DataFrame(direct_competitors)
-                        st.dataframe(direct_df, use_container_width=True)
-                    else:
-                        st.info("No direct competitors detected.")
+                insights = generate_strategic_insights(
+                    primary_row=primary_row,
+                    benchmark_rows=benchmark_rows,
+                    keyword=keyword
+                )
 
-                with comp_tab3:
-                    st.markdown("### Primary Venue + Top 3 Direct Competitors")
-
-                    primary_result = get_primary_result(competitors, primary_url=url)
-                    top3_external = get_top_n_external_direct_competitors(competitors, n=3, primary_url=url)
-                    
-                    benchmark_rows = []
-                    
-                    if primary_result:
-                        try:
-                            with st.spinner(f"Analyzing primary venue..."):
-                                primary_analysis = analyze_venue(primary_result["Link"], keyword)
-                                primary_analysis["SERP Rank"] = primary_result["SERP Rank"]
-                                primary_analysis["Role"] = "Primary Venue"
-                                benchmark_rows.append(primary_analysis)
-                        except Exception:
-                            benchmark_rows.append({
-                                "Venue Name": primary_result["Title"],
-                                "URL": primary_result["Link"],
-                                "SEO Score": 0,
-                                "Score Band": "Error",
-                                "SERP Rank": primary_result["SERP Rank"],
-                                "Role": "Primary Venue"
-                            })
-                    
-                    for idx, item in enumerate(top3_external):
-                        try:
-                            with st.spinner(f"Analyzing competitor {idx+1}/3..."):
-                                result = analyze_venue(item["Link"], keyword)
-                                result["SERP Rank"] = item["SERP Rank"]
-                                result["Role"] = "Direct Competitor"
-                                benchmark_rows.append(result)
-                        except Exception:
-                            benchmark_rows.append({
-                                "Venue Name": item["Title"],
-                                "URL": item["Link"],
-                                "SEO Score": 0,
-                                "Score Band": "Error",
-                                "SERP Rank": item["SERP Rank"],
-                                "Role": "Direct Competitor"
-                            })
-                    
-                    if benchmark_rows:
-                        benchmark_df = pd.DataFrame(benchmark_rows)
-                        benchmark_df = benchmark_df.sort_values(by="SERP Rank").reset_index(drop=True)
-                        
-                        st.dataframe(benchmark_df, use_container_width=True)
-                        
-                        chart_df = benchmark_df[["Venue Name", "SEO Score", "Role"]].copy()
-                        fig = px.bar(
-                            chart_df,
-                            x="Venue Name",
-                            y="SEO Score",
-                            color="Role",
-                            text="SEO Score",
-                            title="Competitive Benchmark"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Insights
-                        primary_rows = [row for row in benchmark_rows if row.get("Role") == "Primary Venue"]
-                        
-                        if primary_rows:
-                            summary_data = build_benchmark_summary(primary_rows[0], benchmark_rows)
-                            
-                            st.markdown("### 📈 Benchmark Summary")
-                            
-                            bench_cols = st.columns(4)
-                            with bench_cols[0]:
-                                st.metric("Primary Rank", f"#{summary_data['primary_rank']}")
-                            with bench_cols[1]:
-                                st.metric("Primary Score", summary_data["primary_score"])
-                            with bench_cols[2]:
-                                st.metric("Top Competitor", summary_data["top_competitor"])
-                            with bench_cols[3]:
-                                st.metric("Gap", summary_data["gap"])
-                            
-                            insights = generate_strategic_insights(
-                                primary_row=primary_rows[0],
-                                benchmark_rows=benchmark_rows,
-                                keyword=keyword
-                            )
-                            
-                            st.markdown("### 💡 Strategic Insights")
-                            for insight in insights:
-                                st.info(f"• {insight}")
-                            
-                            # AI Summary
-                            if gemini_api_key:
-                                st.markdown("### 🤖 AI Executive Summary")
-                                
-                                primary_fixes = build_recommended_fixes(
-                                    title_has_keyword=False,
-                                    meta_has_keyword=False,
-                                    h1_has_keyword=False,
-                                    kc=primary_rows[0].get("Keyword Count", 0),
-                                    title_len=50,
-                                    meta_len=150,
-                                    missing_alt_count=primary_rows[0].get("Images Missing ALT", 0),
-                                    pagespeed_data=None
-                                )
-                                
-                                with st.spinner("🤖 Generating AI insights..."):
-                                    ai_summary = generate_ai_executive_summary(
-                                        gemini_api_key=gemini_api_key,
-                                        primary_name=primary_rows[0].get("Venue Name", "Primary"),
-                                        keyword=keyword,
-                                        primary_rank=primary_rows[0].get("SERP Rank", "N/A"),
-                                        primary_score=primary_rows[0].get("SEO Score", 0),
-                                        top_competitor=summary_data["top_competitor"],
-                                        strategic_insights=insights,
-                                        recommended_fixes=primary_fixes
-                                    )
-                                
-                                if ai_summary:
-                                    st.markdown(ai_summary)
-                            
-                            # Keyword Opportunities
-                            st.markdown("### 🔑 Keyword Opportunities")
-                            
-                            primary_text = ""
-                            try:
-                                primary_soup, _ = get_page_soup(primary_rows[0]["URL"])
-                                primary_text = get_text_content(primary_soup)
-                            except:
-                                pass
-                            
-                            competitor_texts = []
-                            for row in benchmark_rows:
-                                if row.get("Role") == "Direct Competitor":
-                                    try:
-                                        comp_soup, _ = get_page_soup(row["URL"])
-                                        competitor_texts.append(get_text_content(comp_soup))
-                                    except:
-                                        pass
-                            
-                            if primary_text and competitor_texts:
-                                opportunities = find_keyword_opportunities(primary_text, competitor_texts)
-                                
-                                if opportunities:
-                                    opp_df = pd.DataFrame(
-                                        opportunities,
-                                        columns=["Keyword", "Frequency", "Type"]
-                                    )
-                                    st.dataframe(opp_df, use_container_width=True)
-                                else:
-                                    st.info("No keyword opportunities found.")
-
-            else:
-                st.warning("No competitor results found.")
+                with st.spinner("Generating AI summary..."):
+                    ai_summary = generate_ai_executive_summary(
+                        gemini_api_key=gemini_api_key,
+                        primary_name=primary_row.get("Venue Name", url),
+                        keyword=keyword,
+                        primary_rank="N/A",
+                        primary_score=primary_row.get("SEO Score", 0),
+                        top_competitor=best_comp_name,
+                        strategic_insights=insights,
+                        recommended_fixes=[]
+                    )
+                if ai_summary:
+                    st.markdown(ai_summary)
 
         except Exception as e:
-            st.error(f"❌ Competitor search error: {e}")
+            st.error(f"❌ Competitor analysis error: {e}")

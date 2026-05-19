@@ -16,7 +16,7 @@ def get_pagespeed_data(url, api_key, strategy="mobile"):
         ]
     }
 
-    response = requests.get(endpoint, params=params, timeout=60)
+    response = requests.get(endpoint, params=params, timeout=45)
     response.raise_for_status()
 
     data = response.json()

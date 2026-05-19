@@ -461,8 +461,8 @@ if analyze_clicked:
                     status_text.text("⚡ Fetching PageSpeed data...")
                     progress_bar.progress(90)
                     pagespeed_data = get_pagespeed_data(url, pagespeed_api_key, strategy="mobile")
-                except Exception as ps_error:
-                    st.warning(f"PageSpeed API: {ps_error}")
+                except Exception:
+                    pass  # PageSpeed is optional; skip silently on timeout/error
 
             recommended_fixes = build_recommended_fixes(
                 title_has_keyword=title_has_keyword,

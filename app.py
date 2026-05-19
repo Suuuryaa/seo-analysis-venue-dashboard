@@ -775,10 +775,10 @@ if competitors_clicked:
                     gemini_api_key=gemini_api_key
                 )
                 
-                # Show search progression
+                # Show all search log messages
+                search_status.empty()
                 for log_msg in search_log:
-                    search_status.info(log_msg)
-                    time.sleep(0.3)
+                    st.info(log_msg)
                 
                 # Final location message
                 st.success(f"✅ Competitors discovered! {location_msg}")

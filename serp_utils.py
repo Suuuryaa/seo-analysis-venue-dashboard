@@ -102,6 +102,9 @@ def progressive_competitor_search(url, keyword, api_key, filter_func, min_compet
     direct_competitors = []
 
     # LEVEL 0: Gemini AI — asks LLM to identify real local competitors by name/domain
+    if not gemini_api_key:
+        search_log.append("⚠️ No Gemini API key configured — using search-based discovery")
+
     if gemini_api_key:
         from competitor_utils import get_competitors_via_gemini
         search_log.append(f"🤖 Asking AI: who are local competitors of {domain} for '{keyword}'?")
@@ -142,17 +145,14 @@ def progressive_competitor_search(url, keyword, api_key, filter_func, min_compet
 
         search_log.append(f"⚠️ Only {len(direct_competitors)} found via related search, expanding...")
 
-    # LEVEL 2: keyword + domain hint (e.g. "data leader parrotanalytics alternatives")
+    # LEVEL 2: "{brand} competitors {country}" — domain-contextual, ignores misleading keyword
     if domain_hint:
-        search_query = f"{keyword} {domain_hint} alternatives competitors"
+        country_str = location['country_name'] if location and location.get('country_name') else ""
+        search_query = f"{domain_hint} competitors {country_str}".strip()
         search_log.append(f"🔄 Searching: {search_query}")
 
-        location_params = {}
-        if location:
-            location_params = {'gl': location['serper_gl']}
-
+        location_params = {'gl': location['serper_gl']} if location else {}
         results2 = get_serp_results(search_query, api_key, location_params or None)
-        # Merge, deduplicate by link
         seen = {r["link"] for r in all_results}
         for r in results2:
             if r["link"] not in seen:
@@ -160,18 +160,16 @@ def progressive_competitor_search(url, keyword, api_key, filter_func, min_compet
                 seen.add(r["link"])
 
         direct_competitors = filter_func(all_results, primary_url=url)
-
         if len(direct_competitors) >= min_competitors:
             return all_results, direct_competitors, search_log, f"🌐 Competitors of {domain}"
 
-        search_log.append(f"⚠️ Still only {len(direct_competitors)} found, trying keyword search...")
+        search_log.append(f"⚠️ Still only {len(direct_competitors)} found, expanding...")
 
-    # LEVEL 3: Geo-aware keyword search
-    if location and location.get('country_name'):
-        search_query = f"{keyword} {location['country_name']}"
-        search_log.append(f"🔄 Expanding to: {location['country_name']}")
-        location_params = {'gl': location['serper_gl']}
-        results3 = get_serp_results(search_query, api_key, location_params)
+    # LEVEL 3: "{brand} alternatives" global
+    if domain_hint:
+        search_query = f"{domain_hint} alternatives"
+        search_log.append(f"🔄 Searching: {search_query}")
+        results3 = get_serp_results(search_query, api_key)
         seen = {r["link"] for r in all_results}
         for r in results3:
             if r["link"] not in seen:
@@ -179,16 +177,7 @@ def progressive_competitor_search(url, keyword, api_key, filter_func, min_compet
                 seen.add(r["link"])
         direct_competitors = filter_func(all_results, primary_url=url)
         if len(direct_competitors) >= min_competitors:
-            return all_results, direct_competitors, search_log, f"🌍 {location['country_name']} (country-wide)"
-
-    # LEVEL 4: Raw global keyword fallback
-    search_log.append(f"🔄 Global keyword search: {keyword}")
-    results4 = get_serp_results(keyword, api_key)
-    seen = {r["link"] for r in all_results}
-    for r in results4:
-        if r["link"] not in seen:
-            all_results.append(r)
-            seen.add(r["link"])
+            return all_results, direct_competitors, search_log, f"🌍 Global competitors of {domain}"
 
     direct_competitors = filter_func(all_results, primary_url=url)
     return all_results, direct_competitors, search_log, "🌍 Global results"

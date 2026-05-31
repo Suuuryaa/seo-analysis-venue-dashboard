@@ -1402,7 +1402,8 @@ if competitors_clicked:
                         primary_score=primary_row.get("SEO Score", 0),
                         top_competitor=best_comp_name,
                         strategic_insights=insights,
-                        recommended_fixes=[]
+                        recommended_fixes=[],
+                        benchmark_rows=benchmark_rows,
                     )
                 if ai_summary:
                     st.markdown(ai_summary)

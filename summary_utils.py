@@ -46,55 +46,98 @@ def generate_ai_executive_summary(
     primary_score,
     top_competitor,
     strategic_insights=None,
-    recommended_fixes=None
+    recommended_fixes=None,
+    benchmark_rows=None,
 ):
     if not gemini_api_key:
         return "No Gemini API key provided."
 
     strategic_insights = strategic_insights or []
     recommended_fixes = recommended_fixes or []
+    benchmark_rows = benchmark_rows or []
 
-    insights_text = "\n".join([f"- {item}" for item in strategic_insights[:5]])
-    fixes_text = "\n".join(
-        [
-            f"- {item.get('Priority', '')} | {item.get('Issue', '')} | {item.get('Recommended Fix', '')}"
-            for item in recommended_fixes[:5]
-        ]
+    # Build competitor comparison table text
+    valid_rows = [r for r in benchmark_rows if r.get("Score Band") not in ("Blocked", "Error")]
+    comp_rows = [r for r in valid_rows if "Competitor" in r.get("Role", "")]
+    primary_rows = [r for r in valid_rows if "Primary" in r.get("Role", "")]
+
+    comp_lines = []
+    for r in comp_rows[:10]:
+        comp_lines.append(
+            f"  - {r.get('Venue Name','?')}: SEO Score {r.get('SEO Score',0)}, "
+            f"Word Count {r.get('Word Count',0)}, Keyword Count {r.get('Keyword Count',0)}, "
+            f"HTTPS {r.get('HTTPS','?')}, Schema {r.get('Schema','?')}"
+        )
+    comp_text = "\n".join(comp_lines) if comp_lines else "  No competitor data available."
+
+    primary_data = primary_rows[0] if primary_rows else {}
+    primary_detail = (
+        f"SEO Score: {primary_data.get('SEO Score', primary_score)}, "
+        f"Word Count: {primary_data.get('Word Count', 0)}, "
+        f"Keyword Count: {primary_data.get('Keyword Count', 0)}, "
+        f"HTTPS: {primary_data.get('HTTPS', '?')}, "
+        f"Schema Markup: {primary_data.get('Schema', '?')}, "
+        f"Internal Links: {primary_data.get('Internal Links', 0)}, "
+        f"Images Missing ALT: {primary_data.get('Images Missing ALT', 0)}"
     )
 
-    prompt = f"""
-You are an expert SEO strategist.
+    insights_text = "\n".join([f"  - {i}" for i in strategic_insights[:8]]) or "  None provided."
 
-Write a short executive SEO summary for a non-technical business audience.
+    prompt = f"""You are a senior SEO strategist writing a detailed analysis report for a business owner.
 
-Primary venue: {primary_name}
-Target keyword: {keyword}
-Primary SERP rank: {primary_rank}
-Primary SEO score: {primary_score}
-Top competitor: {top_competitor}
+PRIMARY SITE: {primary_name}
+TARGET KEYWORD: "{keyword}"
+PRIMARY SEO DATA: {primary_detail}
+BEST COMPETITOR: {top_competitor}
 
-Strategic insights:
+COMPETITOR DATA:
+{comp_text}
+
+STRATEGIC INSIGHTS:
 {insights_text}
 
-Recommended fixes:
-{fixes_text}
+Write a COMPREHENSIVE SEO analysis report with these exact sections:
 
-Write:
-1. A short executive summary
-2. 3 priority actions
-3. A 1-sentence conclusion
-"""
+## Executive Summary
+2-3 sentences on overall SEO position vs competitors.
+
+## Strengths
+3-5 bullet points on what the primary site is doing well compared to competitors.
+
+## Weaknesses
+3-5 bullet points on specific areas where the primary site is underperforming vs competitors.
+
+## Keyword & Content Analysis
+Specific analysis of keyword usage, content depth, and how to improve for "{keyword}".
+
+## Technical SEO Issues
+Specific technical problems found (HTTPS, schema, alt text, internal links) with impact explanation.
+
+## Competitor Insights
+2-3 specific things top competitors are doing better that should be replicated.
+
+## Priority Action Plan
+5 concrete, specific actions ranked by impact. Each should say WHAT to do, WHERE to do it, and WHY it will help rankings.
+
+## Conclusion
+1-2 sentences on expected outcome if recommendations are followed.
+
+Be specific, use the actual data provided, and write for a non-technical business owner."""
 
     try:
-        payload = {"contents": [{"parts": [{"text": prompt}]}],
-                   "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024}}
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 8192}
+        }
 
-        # Discover available models
         models_to_try = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash",
                          "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-1.0-pro"]
         for api_ver in ["v1beta", "v1"]:
             try:
-                r = _req.get(f"https://generativelanguage.googleapis.com/{api_ver}/models?key={gemini_api_key}", timeout=10)
+                r = _req.get(
+                    f"https://generativelanguage.googleapis.com/{api_ver}/models?key={gemini_api_key}",
+                    timeout=10
+                )
                 if r.status_code == 200:
                     discovered = [
                         m["name"].replace("models/", "")
@@ -112,7 +155,7 @@ Write:
             for api_ver in ["v1beta", "v1"]:
                 ep = (f"https://generativelanguage.googleapis.com/{api_ver}"
                       f"/models/{model}:generateContent?key={gemini_api_key}")
-                resp = _req.post(ep, json=payload, timeout=30)
+                resp = _req.post(ep, json=payload, timeout=60)
                 if resp.status_code == 200:
                     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 

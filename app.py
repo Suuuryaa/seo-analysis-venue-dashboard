@@ -822,16 +822,47 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
             st.text_input("H1 Tags", value=", ".join(h1) if h1 else "None", disabled=True)
 
         with content_col2:
-            st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.5rem;">Keyword Analysis</div>', unsafe_allow_html=True)
-            st.markdown(f"**Keyword in Title:** {'✅ Yes' if title_has_keyword else '❌ No'}")
-            st.markdown(f"**Keyword in Meta:** {'✅ Yes' if meta_has_keyword else '❌ No'}")
-            st.markdown(f"**Keyword in H1:** {'✅ Yes' if h1_has_keyword else '❌ No'}")
-            st.markdown(f"**Token Coverage:** {token_coverage}%")
+            st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.8rem;">Keyword Analysis</div>', unsafe_allow_html=True)
+
+            for _label, _hit in [("Keyword in Title", title_has_keyword), ("Keyword in Meta", meta_has_keyword), ("Keyword in H1", h1_has_keyword)]:
+                _c = "#00C853" if _hit else "#EF5350"
+                _ic = "✓" if _hit else "✗"
+                _txt = "Yes" if _hit else "No"
+                st.markdown(
+                    f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);'
+                    f'border-left:3px solid {_c};border-radius:8px;'
+                    f'padding:0.55rem 0.9rem;margin-bottom:0.45rem;'
+                    f'display:flex;align-items:center;justify-content:space-between;">'
+                    f'<span style="font-size:0.78rem;color:rgba(255,255,255,0.6);">{_label}</span>'
+                    f'<span style="font-size:0.78rem;font-weight:700;color:{_c};">{_ic} {_txt}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            _cov_color = "#00C853" if token_coverage >= 75 else ("#FF9800" if token_coverage >= 50 else "#EF5350")
+            st.markdown(
+                f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);'
+                f'border-left:3px solid {_cov_color};border-radius:8px;'
+                f'padding:0.55rem 0.9rem;margin-bottom:0.8rem;'
+                f'display:flex;align-items:center;justify-content:space-between;">'
+                f'<span style="font-size:0.78rem;color:rgba(255,255,255,0.6);">Token Coverage</span>'
+                f'<span style="font-size:0.78rem;font-weight:700;color:{_cov_color};">{token_coverage}%</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
             if token_counts:
-                st.markdown("**Individual Token Counts:**")
+                st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0.4rem 0 0.5rem;">Token Counts</div>', unsafe_allow_html=True)
                 for token, count in token_counts.items():
-                    st.markdown(f"- *{token}*: {count} times")
+                    _word = "time" if count == 1 else "times"
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                        f'padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
+                        f'<span style="font-size:0.78rem;color:rgba(255,255,255,0.5);font-style:italic;">{token}</span>'
+                        f'<span style="font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.7);">{count} {_word}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
 
     with tab4:
         st.markdown('<div class="section-header">Recommended Actions</div>', unsafe_allow_html=True)

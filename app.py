@@ -26,43 +26,108 @@ from geo_utils import check_ai_crawlers, score_citability, check_llmstxt, check_
 
 
 # ==================== API KEY CONFIGURATION ====================
-# Load from Streamlit secrets (cloud) or .env (local development)
-default_pagespeed = ""
-default_serper = ""
-default_gemini = ""
+import json
+import hashlib
+
+_default_pagespeed = ""
+_default_serper = ""
+_default_gemini = ""
 
 try:
-    # Try Streamlit Cloud secrets first
-    default_pagespeed = st.secrets["PAGESPEED_API_KEY"]
-    default_serper = st.secrets["SERPER_API_KEY"]
-    default_gemini = st.secrets["GEMINI_API_KEY"]
+    _default_pagespeed = st.secrets["PAGESPEED_API_KEY"]
+    _default_serper = st.secrets["SERPER_API_KEY"]
+    _default_gemini = st.secrets["GEMINI_API_KEY"]
 except (KeyError, FileNotFoundError, AttributeError):
-    # Fall back to .env file for local development
     try:
         from dotenv import load_dotenv
         load_dotenv()
-        default_pagespeed = os.getenv("PAGESPEED_API_KEY", "")
-        default_serper = os.getenv("SERPER_API_KEY", "")
-        default_gemini = os.getenv("GEMINI_API_KEY", "")
+        _default_pagespeed = os.getenv("PAGESPEED_API_KEY", "")
+        _default_serper = os.getenv("SERPER_API_KEY", "")
+        _default_gemini = os.getenv("GEMINI_API_KEY", "")
     except:
         pass
 
-# Use keys directly in background - never expose to UI
-pagespeed_api_key = default_pagespeed
-serp_key = default_serper
-gemini_api_key = default_gemini
+# ==================== IP-BASED RATE LIMITING ====================
+IP_LIMIT = 2
+_IP_STORE = os.path.join(os.path.dirname(__file__), "ip_counts.json")
 
-# Daily usage limit for demo protection
-DAILY_LIMIT = 50
+def _get_client_ip():
+    try:
+        headers = st.context.headers
+        ip = headers.get("X-Forwarded-For", headers.get("X-Real-IP", "local"))
+        return ip.split(",")[0].strip()
+    except Exception:
+        return "local"
 
-if 'daily_uses' not in st.session_state:
-    st.session_state.daily_uses = 0
-    st.session_state.last_reset = date.today()
+def _hash_ip(ip):
+    return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
-# Reset counter daily
-if st.session_state.last_reset != date.today():
-    st.session_state.daily_uses = 0
-    st.session_state.last_reset = date.today()
+def _load_ip_counts():
+    if os.path.exists(_IP_STORE):
+        try:
+            with open(_IP_STORE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _save_ip_counts(counts):
+    try:
+        with open(_IP_STORE, "w") as f:
+            json.dump(counts, f)
+    except Exception:
+        pass
+
+def _get_ip_uses(ip_hash):
+    return _load_ip_counts().get(ip_hash, 0)
+
+def _increment_ip_uses(ip_hash):
+    counts = _load_ip_counts()
+    counts[ip_hash] = counts.get(ip_hash, 0) + 1
+    _save_ip_counts(counts)
+    return counts[ip_hash]
+
+_client_ip = _get_client_ip()
+_ip_hash = _hash_ip(_client_ip)
+
+# Session state for user-provided keys
+if "user_serper_key" not in st.session_state:
+    st.session_state.user_serper_key = ""
+if "user_gemini_key" not in st.session_state:
+    st.session_state.user_gemini_key = ""
+if "user_pagespeed_key" not in st.session_state:
+    st.session_state.user_pagespeed_key = ""
+if "user_scraperapi_key" not in st.session_state:
+    st.session_state.user_scraperapi_key = ""
+
+def _using_own_keys():
+    return bool(st.session_state.user_serper_key and st.session_state.user_gemini_key)
+
+def _active_keys():
+    """Return the keys to actually use — user's own if provided, else built-in."""
+    if _using_own_keys():
+        return (
+            st.session_state.user_serper_key,
+            st.session_state.user_gemini_key,
+            st.session_state.user_pagespeed_key or _default_pagespeed,
+            st.session_state.user_scraperapi_key,
+        )
+    return (_default_serper, _default_gemini, _default_pagespeed, "")
+
+def _check_limit():
+    """Return (allowed, remaining). If using own keys, always allowed."""
+    if _using_own_keys():
+        return True, 999
+    used = _get_ip_uses(_ip_hash)
+    remaining = max(0, IP_LIMIT - used)
+    return remaining > 0, remaining
+
+# Active keys for this session
+serp_key, gemini_api_key, pagespeed_api_key, _scraperapi_key = _active_keys()
+
+# Inject ScraperAPI key into environment so seo_utils picks it up
+if _scraperapi_key:
+    os.environ["SCRAPER_API_KEY"] = _scraperapi_key
 
 
 # ==================== UI HELPER FUNCTIONS ====================
@@ -894,15 +959,21 @@ st.markdown("""
 # ==================== INPUT SECTION ====================
 
 def _render_badge(placeholder):
-    remaining = DAILY_LIMIT - st.session_state.daily_uses
-    pct = remaining / DAILY_LIMIT
-    bar_color = "#00C853" if pct > 0.5 else "#FFA726" if pct > 0.2 else "#EF5350"
+    if _using_own_keys():
+        badge_text = '<strong style="color:#7EC7A3;">Unlimited</strong>'
+        dot_color = "#7EC7A3"
+    else:
+        used = _get_ip_uses(_ip_hash)
+        rem = max(0, IP_LIMIT - used)
+        bar_color = "#00C853" if rem == IP_LIMIT else "#FFA726" if rem > 0 else "#EF5350"
+        badge_text = f'<strong style="color:{bar_color}">{rem}</strong> / {IP_LIMIT} tries left'
+        dot_color = bar_color
     placeholder.markdown(f"""
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
     <span style="font-size:0.65rem;font-weight:800;color:#B02025;letter-spacing:0.18em;text-transform:uppercase;">🔍 Analysis Setup</span>
     <div class="demo-badge">
-        <div class="demo-dot"></div>
-        Demo &nbsp;·&nbsp; <strong style="color:{bar_color}">{remaining}</strong> left today
+        <div class="demo-dot" style="background:{dot_color};box-shadow:0 0 8px {dot_color};"></div>
+        Demo &nbsp;·&nbsp; {badge_text}
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -934,6 +1005,74 @@ if st.session_state.show_compare_urls:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# ── Use Your Own API Keys (collapsible) ──────────────────────────────────────
+if "show_own_keys" not in st.session_state:
+    st.session_state.show_own_keys = False
+
+_own_keys_label = "— USE YOUR OWN API KEYS  (unlimited)" if st.session_state.show_own_keys else "+ USE YOUR OWN API KEYS  (get unlimited tries)"
+if st.button(_own_keys_label, key="toggle_own_keys", type="secondary"):
+    st.session_state.show_own_keys = not st.session_state.show_own_keys
+
+if st.session_state.show_own_keys:
+    _allowed, _remaining = _check_limit()
+    if not _allowed:
+        st.markdown("""
+<div style="background:rgba(176,32,37,0.08);border:1px solid rgba(176,32,37,0.25);
+            border-radius:10px;padding:0.8rem 1.2rem;font-size:0.82rem;
+            color:rgba(255,255,255,0.6);margin-bottom:0.6rem;">
+    You've used your <strong style="color:#FF5252;">2 free tries</strong>.
+    Add your own API keys below to continue with unlimited access.
+</div>""", unsafe_allow_html=True)
+
+    st.markdown("""
+<div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:0.8rem;line-height:1.6;">
+    Enter your own API keys for <strong style="color:rgba(255,255,255,0.55);">unlimited</strong> usage.
+    Keys are stored only in your browser session and never saved to any server.
+</div>""", unsafe_allow_html=True)
+
+    _k1, _k2 = st.columns(2)
+    with _k1:
+        _s = st.text_input("Serper API Key  ✱ required", type="password",
+                           value=st.session_state.user_serper_key,
+                           placeholder="Get free at serper.dev")
+        if _s != st.session_state.user_serper_key:
+            st.session_state.user_serper_key = _s
+    with _k2:
+        _g = st.text_input("Gemini API Key  ✱ required", type="password",
+                           value=st.session_state.user_gemini_key,
+                           placeholder="Get free at aistudio.google.com")
+        if _g != st.session_state.user_gemini_key:
+            st.session_state.user_gemini_key = _g
+
+    _k3, _k4 = st.columns(2)
+    with _k3:
+        _p = st.text_input("PageSpeed API Key  (optional)", type="password",
+                           value=st.session_state.user_pagespeed_key,
+                           placeholder="console.cloud.google.com")
+        if _p != st.session_state.user_pagespeed_key:
+            st.session_state.user_pagespeed_key = _p
+    with _k4:
+        _sc = st.text_input("ScraperAPI Key  (optional)", type="password",
+                            value=st.session_state.user_scraperapi_key,
+                            placeholder="scraperapi.com — free trial available")
+        if _sc != st.session_state.user_scraperapi_key:
+            st.session_state.user_scraperapi_key = _sc
+
+    st.markdown("""
+<div style="font-size:0.72rem;color:rgba(255,255,255,0.28);margin-top:0.3rem;line-height:1.5;">
+    💡 <strong style="color:rgba(255,255,255,0.4);">ScraperAPI</strong> is optional but recommended —
+    it helps bypass bot-blocking on large corporate sites (free 14-day trial at scraperapi.com).
+</div>""", unsafe_allow_html=True)
+
+    if _using_own_keys():
+        # Refresh active keys immediately
+        serp_key, gemini_api_key, pagespeed_api_key, _scraperapi_key = _active_keys()
+        if _scraperapi_key:
+            os.environ["SCRAPER_API_KEY"] = _scraperapi_key
+        st.success("✅ Using your own API keys — unlimited access enabled.")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
 # ==================== ACTION BUTTONS ====================
 
 col_btn1, col_btn2, col_spacer = st.columns([2, 2, 3])
@@ -947,10 +1086,18 @@ with col_btn2:
 # ==================== ANALYZE SECTION ====================
 
 if analyze_clicked:
-    # Check daily limit
-    if st.session_state.daily_uses >= DAILY_LIMIT:
-        st.error(f"📊 Daily demo limit reached ({DAILY_LIMIT} analyses/day). Please try again tomorrow!")
-        st.info("💡 Want unlimited usage? This is a portfolio demo with usage limits to protect API costs.")
+    _allowed, _remaining = _check_limit()
+    if not _allowed:
+        st.markdown("""
+<div style="background:rgba(176,32,37,0.1);border:1px solid rgba(176,32,37,0.3);
+            border-radius:12px;padding:1.2rem 1.6rem;">
+    <div style="font-size:0.75rem;font-weight:800;color:#FF5252;letter-spacing:0.1em;
+                text-transform:uppercase;margin-bottom:0.4rem;">Free Try Limit Reached</div>
+    <div style="font-size:0.88rem;color:rgba(255,255,255,0.6);">
+        You've used your <strong>2 complimentary analyses</strong> from this IP address.<br>
+        Click <strong style="color:#7EC7A3;">+ USE YOUR OWN API KEYS</strong> above to continue with unlimited access using your own free API keys.
+    </div>
+</div>""", unsafe_allow_html=True)
         st.stop()
     
     if url and keyword:
@@ -1061,8 +1208,9 @@ if analyze_clicked:
             progress_bar.empty()
             status_text.empty()
 
-            # Increment usage counter after successful analysis
-            st.session_state.daily_uses += 1
+            # Increment IP usage counter
+            if not _using_own_keys():
+                _increment_ip_uses(_ip_hash)
             _render_badge(_badge_placeholder)
 
             # ==================== DISPLAY RESULTS ====================
@@ -1493,8 +1641,18 @@ if analyze_clicked:
 # ==================== COMPETITORS SECTION ====================
 
 if competitors_clicked:
-    if st.session_state.daily_uses >= DAILY_LIMIT:
-        st.error(f"📊 Daily demo limit reached ({DAILY_LIMIT} analyses/day). Please try again tomorrow!")
+    _allowed, _remaining = _check_limit()
+    if not _allowed:
+        st.markdown("""
+<div style="background:rgba(176,32,37,0.1);border:1px solid rgba(176,32,37,0.3);
+            border-radius:12px;padding:1.2rem 1.6rem;">
+    <div style="font-size:0.75rem;font-weight:800;color:#FF5252;letter-spacing:0.1em;
+                text-transform:uppercase;margin-bottom:0.4rem;">Free Try Limit Reached</div>
+    <div style="font-size:0.88rem;color:rgba(255,255,255,0.6);">
+        You've used your <strong>2 complimentary analyses</strong> from this IP address.<br>
+        Click <strong style="color:#7EC7A3;">+ USE YOUR OWN API KEYS</strong> above to continue with unlimited access.
+    </div>
+</div>""", unsafe_allow_html=True)
         st.stop()
     elif not keyword:
         st.error("❌ Please enter a target keyword first.")
@@ -1503,7 +1661,8 @@ if competitors_clicked:
     elif not gemini_api_key:
         st.error("❌ Gemini API key not configured. Add GEMINI_API_KEY to Streamlit secrets.")
     else:
-        st.session_state.daily_uses += 1
+        if not _using_own_keys():
+            _increment_ip_uses(_ip_hash)
         _render_badge(_badge_placeholder)
         try:
             from competitor_utils import get_competitors_via_gemini

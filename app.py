@@ -717,34 +717,39 @@ st.markdown("""
 
 st.markdown("""<div class="input-card"><div class="input-card-title">🔍 Analysis Setup</div></div>""", unsafe_allow_html=True)
 
-col1, col2 = st.columns([3, 2])
+col1, col2 = st.columns([3, 1])
 
 with col1:
-    url = st.text_input("🌐 Primary Venue URL", placeholder="https://example.com")
+    url = st.text_input("🌐 Website URL", placeholder="https://example.com")
     keyword = st.text_input("🔑 Target Keyword", placeholder="e.g. running shoes, web design agency")
 
 with col2:
-    compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
     remaining = DAILY_LIMIT - st.session_state.daily_uses
     pct = remaining / DAILY_LIMIT
     bar_color = "#00C853" if pct > 0.5 else "#FFA726" if pct > 0.2 else "#EF5350"
     st.markdown(f"""
     <div class="demo-badge">
         <div class="demo-dot"></div>
-        Demo mode &nbsp;·&nbsp; <strong style="color:{bar_color}">{remaining}</strong> analyses remaining today
+        Demo &nbsp;·&nbsp; <strong style="color:{bar_color}">{remaining}</strong> left today
     </div>""", unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("**🏆 Multi-Venue Leaderboard** — enter multiple URLs to compare (one per line, optional)")
-venue_urls_text = st.text_area(
-    "multi_venue",
-    height=90,
-    placeholder="https://venue1.com\nhttps://venue2.com\nhttps://venue3.com",
-    label_visibility="collapsed"
-)
+# ── Advanced: Compare Specific URLs (collapsible) ────────────────────────────
+with st.expander("🔗 Compare Specific URLs  *(optional — paste competitors you already know)*"):
+    venue_urls_text = st.text_area(
+        "Enter one URL per line",
+        height=100,
+        placeholder="https://competitor1.com\nhttps://competitor2.com\nhttps://competitor3.com",
+    )
+    compare_url = st.text_input("Or compare against a single URL", placeholder="https://competitor.com")
 
-st.markdown("---")
+# keep compare_url / venue_urls_text defined even when expander is collapsed
+if "venue_urls_text" not in dir():
+    venue_urls_text = ""
+if "compare_url" not in dir():
+    compare_url = ""
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ==================== ACTION BUTTONS ====================
 

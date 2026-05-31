@@ -493,8 +493,34 @@ def _render_seo_results(d):
 </div>
 """, unsafe_allow_html=True)
 
-    # Download report button
+    # Download report button — combines SEO + competitor data if both available
     _rec_html = "".join([f"<div class='card'><p><strong>{r['Issue']}</strong></p><p>{r['Recommended Fix']}</p><p><em>Impact: {r['Impact']}</em></p></div>" for r in recommended_fixes[:10]])
+
+    _comp_section = ""
+    _cd = st.session_state.comp_data
+    if _cd and _cd.get("keyword") == keyword:
+        _bench = _cd.get("benchmark_rows", [])
+        _valid = [r for r in _bench if r.get("Score Band") != "Blocked"]
+        _comp_rows_html = "".join([
+            f"<tr><td>{r.get('Venue Name','')}</td><td>{r.get('SEO Score',0)}</td>"
+            f"<td>{r.get('Score Band','')}</td><td>{r.get('Word Count',0)}</td>"
+            f"<td>{'✓' if r.get('HTTPS') == 'Yes' else '✗'}</td>"
+            f"<td>{'✓' if r.get('Schema') == 'Yes' else '✗'}</td></tr>"
+            for r in _valid
+        ])
+        _ai_text = _cd.get("ai_summary", "")
+        _ai_html = f"<div class='card' style='white-space:pre-wrap;'>{_ai_text}</div>" if _ai_text else ""
+        _comp_section = f"""
+<h1 style='margin-top:3rem;'>Competitor Intelligence Report</h1>
+<p><strong>Keyword:</strong> {_cd.get('keyword','')} &nbsp;|&nbsp; <strong>Market:</strong> {_cd.get('country','')}</p>
+<h2>Competitor Score Comparison</h2>
+<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%;'>
+<thead><tr style='background:#B02025;color:#fff;'><th>Venue</th><th>SEO Score</th><th>Band</th><th>Words</th><th>HTTPS</th><th>Schema</th></tr></thead>
+<tbody>{_comp_rows_html}</tbody>
+</table>
+<h2>AI Executive Report</h2>
+{_ai_html}"""
+
     _report_html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>SEO Report — {_domain}</title>
 <style>body{{font-family:Arial,sans-serif;background:#f8f8f8;color:#222;padding:2rem;max-width:900px;margin:0 auto;}}
 h1{{color:#B02025;border-bottom:2px solid #B02025;padding-bottom:0.5rem;}}
@@ -504,6 +530,7 @@ h2{{color:#333;margin-top:1.5rem;}}
 .metric .val{{font-size:1.6rem;font-weight:bold;color:#B02025;}}
 .metric .lbl{{font-size:0.7rem;color:#888;text-transform:uppercase;}}
 .pass{{color:#4CAF50;font-weight:bold;}} .fail{{color:#EF5350;font-weight:bold;}}
+table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
 </style></head><body>
 <h1>SEO Analysis Report</h1>
 <p><strong>Site:</strong> {url} &nbsp;|&nbsp; <strong>Keyword:</strong> {keyword} &nbsp;|&nbsp; <strong>Score:</strong> {score}/100</p>
@@ -528,9 +555,11 @@ h2{{color:#333;margin-top:1.5rem;}}
 </div>
 <h2>Recommendations</h2>
 {_rec_html}
+{_comp_section}
 </body></html>"""
+    _dl_label = "⬇ Download Full Report (SEO + Competitors)" if _comp_section else "⬇ Download Report (HTML)"
     st.download_button(
-        label="⬇ Download Report (HTML)",
+        label=_dl_label,
         data=_report_html.encode("utf-8"),
         file_name=f"seo_report_{_domain}_{keyword.replace(' ','_')}.html",
         mime="text/html",

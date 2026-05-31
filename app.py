@@ -2287,20 +2287,11 @@ _has_comp = st.session_state.comp_data is not None
 if _has_seo or _has_comp:
     st.markdown("<div style='margin-top:2rem;'></div>", unsafe_allow_html=True)
 
-    # ── Toggle buttons ─────────────────────────────────────────
-    _seo_dot  = '<span class="toggle-dot"></span>' if _has_seo else ''
-    _comp_dot = '<span class="toggle-dot"></span>' if _has_comp else ''
-    _seo_active  = "active" if st.session_state.results_view == "seo" else ("has-data" if _has_seo else "")
-    _comp_active = "active" if st.session_state.results_view == "comp" else ("has-data" if _has_comp else "")
-
-    st.markdown(f"""
+    st.markdown("""
 <div style="font-size:0.6rem;font-weight:800;color:rgba(255,255,255,0.25);
-            letter-spacing:0.18em;text-transform:uppercase;margin-bottom:0.6rem;">Results</div>
-<div class="results-toggle">
-    <span class="toggle-btn {_seo_active}" id="seo-toggle">{_seo_dot}SEO Analysis</span>
-    <span class="toggle-btn {_comp_active}" id="comp-toggle">{_comp_dot}Competitor Intel</span>
-</div>
-""", unsafe_allow_html=True)
+            letter-spacing:0.18em;text-transform:uppercase;margin-bottom:0.5rem;">
+    Switch Results View
+</div>""", unsafe_allow_html=True)
 
     _t1, _t2, _spacer = st.columns([1.4, 1.8, 8])
     with _t1:

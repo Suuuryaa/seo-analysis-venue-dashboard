@@ -1489,13 +1489,17 @@ if analyze_clicked:
 # ==================== COMPETITORS SECTION ====================
 
 if competitors_clicked:
-    if not keyword:
+    if st.session_state.daily_uses >= DAILY_LIMIT:
+        st.error(f"📊 Daily demo limit reached ({DAILY_LIMIT} analyses/day). Please try again tomorrow!")
+        st.stop()
+    elif not keyword:
         st.error("❌ Please enter a target keyword first.")
     elif not url:
         st.error("❌ Please enter the Primary Venue URL first.")
     elif not gemini_api_key:
         st.error("❌ Gemini API key not configured. Add GEMINI_API_KEY to Streamlit secrets.")
     else:
+        st.session_state.daily_uses += 1
         try:
             from competitor_utils import get_competitors_via_gemini
             from location_utils import get_location_from_url

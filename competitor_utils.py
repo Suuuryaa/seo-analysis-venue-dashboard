@@ -1,5 +1,6 @@
 from urllib.parse import urlparse
 import json
+import time
 
 
 def _get_domain(url):
@@ -260,7 +261,17 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
             try:
                 resp = _req.post(endpoint, json=payload, timeout=30)
                 if resp.status_code == 429:
-                    raise RuntimeError("SPENDING_CAP_429")
+                    body = resp.text.lower()
+                    if "spending" in body or "budget" in body or "billing" in body:
+                        raise RuntimeError("SPENDING_CAP_429")
+                    # Rate limit — wait and retry once before giving up
+                    retry_after = int(resp.headers.get("Retry-After", 35))
+                    time.sleep(min(retry_after, 60))
+                    resp2 = _req.post(endpoint, json=payload, timeout=30)
+                    if resp2.status_code == 200:
+                        resp = resp2
+                    else:
+                        raise RuntimeError(f"RATE_LIMIT_429: {resp.text[:300]}")
                 if resp.status_code in (401, 403):
                     # Key-level failure — no point trying more models or versions
                     code = resp.status_code
@@ -286,7 +297,9 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
             except RuntimeError as e:
                 err_str = str(e)
                 if "SPENDING_CAP_429" in err_str:
-                    raise RuntimeError("spending cap reached — 429")
+                    raise RuntimeError("SPENDING_CAP: monthly budget exceeded")
+                if "RATE_LIMIT_429" in err_str:
+                    raise RuntimeError(err_str)
                 if "INVALID_API_KEY" in err_str or "FORBIDDEN" in err_str:
                     raise
                 last_error = f"{model}/{api_ver} → {e}"

@@ -558,11 +558,11 @@ st.markdown("""
 }
 
 /* ── Expanders ── */
-.streamlit-expanderHeader {
-    border-radius: 10px !important;
-    background: rgba(255,255,255,0.03) !important;
-    border: 1px solid rgba(255,255,255,0.08) !important;
-    font-weight: 600 !important;
+[data-testid="stExpander"] details summary {
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-weight: 600;
 }
 
 /* ── Progress ── */
@@ -632,7 +632,7 @@ col1, col2 = st.columns([3, 2])
 
 with col1:
     url = st.text_input("🌐 Primary Venue URL", placeholder="https://example.com")
-    keyword = st.text_input("🔑 Target Keyword", placeholder="mini golf auckland")
+    keyword = st.text_input("🔑 Target Keyword", placeholder="e.g. running shoes, web design agency")
 
 with col2:
     compare_url = st.text_input("📊 Comparison URL (optional)", placeholder="https://competitor.com")
@@ -647,14 +647,13 @@ with col2:
     </div>""", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-
-with st.expander("🏆 Multi-Venue Leaderboard — enter multiple URLs to compare", expanded=False):
-    venue_urls_text = st.text_area(
-        "One URL per line",
-        height=100,
-        placeholder="https://venue1.com\nhttps://venue2.com\nhttps://venue3.com",
-        label_visibility="collapsed"
-    )
+st.markdown("**🏆 Multi-Venue Leaderboard** — enter multiple URLs to compare (one per line, optional)")
+venue_urls_text = st.text_area(
+    "multi_venue",
+    height=90,
+    placeholder="https://venue1.com\nhttps://venue2.com\nhttps://venue3.com",
+    label_visibility="collapsed"
+)
 
 st.markdown("---")
 
@@ -1238,8 +1237,10 @@ if competitors_clicked:
                     gemini_competitors = get_competitors_via_gemini(url, keyword, gemini_api_key, location)
                 except Exception as e:
                     err_str = str(e)
-                    if "429" in err_str or "spending cap" in err_str or "quota" in err_str.lower():
-                        st.error("💳 **Gemini spending cap reached.** Go to [aistudio.google.com/spend](https://aistudio.google.com/spend) to increase your monthly limit.")
+                    if "SPENDING_CAP" in err_str or "spending cap" in err_str:
+                        st.error("💳 **Gemini monthly budget exceeded.** Go to [aistudio.google.com/spend](https://aistudio.google.com/spend) to increase your spend cap.")
+                    elif "RATE_LIMIT_429" in err_str or ("429" in err_str and "SPENDING" not in err_str):
+                        st.error("⏱️ **Gemini rate limit hit** (too many requests per minute). Wait 30–60 seconds and try again. Your spend cap is fine — this is just a temporary throttle.")
                     elif "INVALID_API_KEY" in err_str or "401" in err_str:
                         st.error("🔑 **Gemini API key is invalid.** In Streamlit Cloud → App settings → Secrets, make sure `GEMINI_API_KEY` is set to a valid key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey).")
                     elif "FORBIDDEN" in err_str or "403" in err_str:

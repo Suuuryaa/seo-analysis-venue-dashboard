@@ -684,7 +684,7 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
             "Schema Markup": has_schema,
         }
         t_labels = list(tech_factors.keys())
-        t_vals = [100 if v else 0 for v in tech_factors.values()]
+        t_vals = [100 if v else 15 for v in tech_factors.values()]  # 15 so failed bars are visible in red
         t_colors = ["#00C853" if v else "#EF5350" for v in tech_factors.values()]
         st.plotly_chart(create_horizontal_bar(t_labels, t_vals, t_colors, "Technical Audit Score (100 = Pass, 0 = Fail)"), use_container_width=True)
 
@@ -849,40 +849,52 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
 
     # PageSpeed Section (if available)
     if pagespeed_data:
-        st.markdown("---")
-        st.markdown("### ⚡ PageSpeed Insights (Mobile)")
+        st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>⚡ PageSpeed Insights (Mobile)</div>", unsafe_allow_html=True)
+
+        perf_score = int(pagespeed_data.get("performance_score", 0) * 100)
+        acc_score  = int(pagespeed_data.get("accessibility_score", 0) * 100)
+        bp_score   = int(pagespeed_data.get("best_practices_score", 0) * 100)
+        seo_score  = int(pagespeed_data.get("seo_score", 0) * 100)
+
+        def _ps_color(s):
+            return "#00C853" if s >= 90 else ("#FF9800" if s >= 50 else "#EF5350")
 
         ps_cols = st.columns(4)
+        for col, lbl, val in zip(ps_cols,
+            ["Performance", "Accessibility", "Best Practices", "SEO"],
+            [perf_score, acc_score, bp_score, seo_score]):
+            col.markdown(
+                f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);'
+                f'border-top:2px solid {_ps_color(val)};border-radius:10px;'
+                f'padding:1rem;text-align:center;">'
+                f'<div style="font-size:2rem;font-weight:800;color:{_ps_color(val)};line-height:1;">{val}<span style="font-size:1rem;color:rgba(255,255,255,0.3);">/100</span></div>'
+                f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.35);margin-top:0.3rem;">{lbl}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
-        with ps_cols[0]:
-            perf_score = int(pagespeed_data.get("performance_score", 0) * 100)
-            st.metric("Performance", f"{perf_score}/100")
+        st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
 
-        with ps_cols[1]:
-            acc_score = int(pagespeed_data.get("accessibility_score", 0) * 100)
-            st.metric("Accessibility", f"{acc_score}/100")
-
-        with ps_cols[2]:
-            bp_score = int(pagespeed_data.get("best_practices_score", 0) * 100)
-            st.metric("Best Practices", f"{bp_score}/100")
-
-        with ps_cols[3]:
-            seo_score = int(pagespeed_data.get("seo_score", 0) * 100)
-            st.metric("SEO", f"{seo_score}/100")
-
-        st.markdown("**Core Web Vitals:**")
+        vitals = [
+            ("FCP", pagespeed_data.get("first_contentful_paint", "N/A")),
+            ("LCP", pagespeed_data.get("largest_contentful_paint", "N/A")),
+            ("SI",  pagespeed_data.get("speed_index", "N/A")),
+            ("TBT", pagespeed_data.get("total_blocking_time", "N/A")),
+            ("CLS", pagespeed_data.get("cumulative_layout_shift", "N/A")),
+        ]
         vital_cols = st.columns(5)
-
-        with vital_cols[0]:
-            st.text(f"FCP: {pagespeed_data.get('first_contentful_paint', 'N/A')}")
-        with vital_cols[1]:
-            st.text(f"LCP: {pagespeed_data.get('largest_contentful_paint', 'N/A')}")
-        with vital_cols[2]:
-            st.text(f"SI: {pagespeed_data.get('speed_index', 'N/A')}")
-        with vital_cols[3]:
-            st.text(f"TBT: {pagespeed_data.get('total_blocking_time', 'N/A')}")
-        with vital_cols[4]:
-            st.text(f"CLS: {pagespeed_data.get('cumulative_layout_shift', 'N/A')}")
+        for col, (label, val) in zip(vital_cols, vitals):
+            col.markdown(
+                f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);'
+                f'border-radius:8px;padding:0.7rem 0.8rem;text-align:center;">'
+                f'<div style="font-size:0.95rem;font-weight:700;color:rgba(255,255,255,0.85);">{val}</div>'
+                f'<div style="font-size:0.55rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.3);margin-top:0.2rem;">{label}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     # Comparison Section (if URL provided)
     if compare_url:

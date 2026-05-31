@@ -157,12 +157,8 @@ def _active_keys():
     return (_default_serper, _default_gemini, _default_pagespeed, "")
 
 def _check_limit():
-    """Return (allowed, remaining). Admins and own-key users always allowed."""
-    if st.session_state.is_admin or _using_own_keys():
-        return True, 999
-    used = _get_monthly_uses()
-    remaining = max(0, MONTHLY_LIMIT - used)
-    return remaining > 0, remaining
+    """Return (allowed, remaining). Always allowed — limits handled by API quota."""
+    return True, 999
 
 # Active keys for this session
 serp_key, gemini_api_key, pagespeed_api_key, _scraperapi_key = _active_keys()
@@ -2046,11 +2042,8 @@ def _render_badge(placeholder):
         badge_text = '<strong style="color:#7EC7A3;">Unlimited</strong>'
         dot_color = "#7EC7A3"
     else:
-        used = _get_monthly_uses()
-        rem = max(0, MONTHLY_LIMIT - used)
-        bar_color = "#00C853" if rem > 10 else "#FFA726" if rem > 0 else "#EF5350"
-        badge_text = f'<strong style="color:{bar_color}">{rem}</strong> / {MONTHLY_LIMIT} tries left this month'
-        dot_color = bar_color
+        badge_text = '<strong style="color:#00C853;">Free</strong>'
+        dot_color = "#00C853"
     placeholder.markdown(f"""
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
     <span style="font-size:0.65rem;font-weight:800;color:#B02025;letter-spacing:0.18em;text-transform:uppercase;">🔍 Analysis Setup</span>

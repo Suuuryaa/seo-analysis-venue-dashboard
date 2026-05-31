@@ -1307,6 +1307,7 @@ if analyze_clicked:
 
             st.session_state.keyword = keyword
             st.session_state.url = url
+            st.session_state.has_seo_results = False
 
             soup, raw_html = get_page_soup(url)
 
@@ -1401,6 +1402,8 @@ if analyze_clicked:
             if not _using_own_keys():
                 _increment_ip_uses(_ip_hash)
             _render_badge(_badge_placeholder)
+            st.session_state.has_seo_results = True
+            st.session_state.seo_result_key = f"{url}::{keyword}"
 
             # ==================== DISPLAY RESULTS ====================
             from urllib.parse import urlparse as _urlp
@@ -1427,6 +1430,50 @@ if analyze_clicked:
 </div>
 """, unsafe_allow_html=True)
 
+            # Download report button
+            _rec_html = "".join([f"<div class='card'><p><strong>{r['Issue']}</strong></p><p>{r['Recommended Fix']}</p><p><em>Impact: {r['Impact']}</em></p></div>" for r in recommended_fixes[:10]])
+            _report_html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>SEO Report — {_domain}</title>
+<style>body{{font-family:Arial,sans-serif;background:#f8f8f8;color:#222;padding:2rem;max-width:900px;margin:0 auto;}}
+h1{{color:#B02025;border-bottom:2px solid #B02025;padding-bottom:0.5rem;}}
+h2{{color:#333;margin-top:1.5rem;}}
+.card{{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1rem;margin:0.8rem 0;}}
+.metric{{display:inline-block;background:#fff;border:1px solid #ddd;border-radius:6px;padding:0.5rem 1rem;margin:0.3rem;text-align:center;min-width:120px;}}
+.metric .val{{font-size:1.6rem;font-weight:bold;color:#B02025;}}
+.metric .lbl{{font-size:0.7rem;color:#888;text-transform:uppercase;}}
+.pass{{color:#4CAF50;font-weight:bold;}} .fail{{color:#EF5350;font-weight:bold;}}
+</style></head><body>
+<h1>SEO Analysis Report</h1>
+<p><strong>Site:</strong> {url} &nbsp;|&nbsp; <strong>Keyword:</strong> {keyword} &nbsp;|&nbsp; <strong>Score:</strong> {score}/100</p>
+<h2>Key Metrics</h2>
+<div class='metric'><div class='val'>{wc:,}</div><div class='lbl'>Word Count</div></div>
+<div class='metric'><div class='val'>{kc}</div><div class='lbl'>Keyword Hits</div></div>
+<div class='metric'><div class='val'>{kd}%</div><div class='lbl'>Keyword Density</div></div>
+<div class='metric'><div class='val'>{len(internal)}</div><div class='lbl'>Internal Links</div></div>
+<div class='metric'><div class='val'>{len(external)}</div><div class='lbl'>External Links</div></div>
+<div class='metric'><div class='val'>{len(missing_alt)}</div><div class='lbl'>Missing ALTs</div></div>
+<h2>Executive Summary</h2>
+<div class='card'><p><strong>Status:</strong> {summary['Overall Status']}</p>
+<p><strong>Strongest Area:</strong> {summary['Strongest Area']}</p>
+<p><strong>Top Issue:</strong> {summary['Top Issue']}</p>
+<p><strong>Priority Action:</strong> {summary['Priority Action']}</p></div>
+<h2>Technical SEO</h2>
+<div class='card'>
+<p class='{"pass" if tech_seo.get("https_enabled") else "fail"}'>{"✓" if tech_seo.get("https_enabled") else "✗"} HTTPS</p>
+<p class='{"pass" if tech_seo.get("mobile_viewport") else "fail"}'>{"✓" if tech_seo.get("mobile_viewport") else "✗"} Mobile Viewport</p>
+<p class='{"pass" if has_schema else "fail"}'>{"✓" if has_schema else "✗"} Schema Markup</p>
+<p class='{"pass" if tech_seo.get("has_canonical") else "fail"}'>{"✓" if tech_seo.get("has_canonical") else "✗"} Canonical URL</p>
+</div>
+<h2>Recommendations</h2>
+{_rec_html}
+</body></html>"""
+            st.download_button(
+                label="⬇ Download Report (HTML)",
+                data=_report_html.encode("utf-8"),
+                file_name=f"seo_report_{_domain}_{keyword.replace(' ','_')}.html",
+                mime="text/html",
+                key="download_seo_report"
+            )
+
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Technical SEO", "Content Analysis", "Recommendations", "GEO Score"])
 
             with tab1:
@@ -1439,15 +1486,11 @@ if analyze_clicked:
 
                 with col_metrics:
                     st.markdown("<div class='section-header'>Key Metrics</div>", unsafe_allow_html=True)
-                    def _metric(label, val, color, sub=""):
-                        return f"""<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);
-                            border-top:2px solid {color};border-radius:10px;
-                            padding:1rem 1rem 0.8rem;text-align:center;">
-                            <div style="font-size:1.8rem;font-weight:800;color:{color};line-height:1;">{val}</div>
-                            <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;
-                                        text-transform:uppercase;color:rgba(255,255,255,0.35);margin-top:0.3rem;">{label}</div>
-                            {"<div style='font-size:0.65rem;color:rgba(255,255,255,0.2);margin-top:0.1rem;'>"+sub+"</div>" if sub else ""}
-                            </div>"""
+                    def _metric(label, val, color):
+                        return (f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);border-top:2px solid {color};border-radius:10px;padding:1rem 1rem 0.8rem;text-align:center;">'
+                                f'<div style="font-size:1.8rem;font-weight:800;color:{color};line-height:1;">{val}</div>'
+                                f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-top:0.3rem;">{label}</div>'
+                                f'</div>')
                     kc1, kc2, kc3 = st.columns(3)
                     kc1.markdown(_metric("Word Count", f"{wc:,}", "#B02025"), unsafe_allow_html=True)
                     kc2.markdown(_metric("Keyword Hits", kc, "#00C853" if kc >= 3 else "#EF5350"), unsafe_allow_html=True)
@@ -1536,7 +1579,7 @@ if analyze_clicked:
 </div>""", unsafe_allow_html=True)
 
             with tab2:
-                st.markdown("### 🔧 Technical SEO Audit")
+                st.markdown('<div class="section-header">Technical SEO Audit</div>', unsafe_allow_html=True)
 
                 # Technical score bar chart
                 tech_factors = {
@@ -1558,12 +1601,12 @@ if analyze_clicked:
                 tech_col1, tech_col2 = st.columns(2)
                 
                 with tech_col1:
-                    st.markdown("#### Security & Protocol")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:1rem 0 0.5rem;">Security & Protocol</div>', unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('https_enabled', False), "HTTPS Enabled"), unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('has_canonical', False), "Canonical URL"), unsafe_allow_html=True)
                     st.markdown(status_indicator(not tech_seo.get('robots_noindex', True), "Indexable (No noindex)"), unsafe_allow_html=True)
                     
-                    st.markdown("#### Structured Data")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:1rem 0 0.5rem;">Structured Data</div>', unsafe_allow_html=True)
                     st.markdown(status_indicator(has_schema, "Schema Markup"), unsafe_allow_html=True)
                     if has_schema:
                         schemas = detect_schema_markup(soup)
@@ -1571,28 +1614,28 @@ if analyze_clicked:
                             st.info(f"**JSON-LD Types:** {', '.join(schemas['json_ld'])}")
                 
                 with tech_col2:
-                    st.markdown("#### Mobile & Accessibility")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:1rem 0 0.5rem;">Mobile & Accessibility</div>', unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('mobile_viewport', False), "Mobile Viewport"), unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('has_lang', False), "Language Attribute"), unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('proper_h1_usage', False), "Single H1 Tag"), unsafe_allow_html=True)
                     
-                    st.markdown("#### Social Media")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:1rem 0 0.5rem;">Social Media</div>', unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('has_og_title', False), "Open Graph Title"), unsafe_allow_html=True)
                     st.markdown(status_indicator(tech_seo.get('has_twitter_card', False), "Twitter Card"), unsafe_allow_html=True)
 
             with tab3:
-                st.markdown("### 📝 Content Analysis")
+                st.markdown('<div class="section-header">Content Analysis</div>', unsafe_allow_html=True)
                 
                 content_col1, content_col2 = st.columns(2)
                 
                 with content_col1:
-                    st.markdown("#### On-Page Elements")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.5rem;">On-Page Elements</div>', unsafe_allow_html=True)
                     st.text_input("Title", value=title, disabled=True)
                     st.text_area("Meta Description", value=meta, height=80, disabled=True)
                     st.text_input("H1 Tags", value=", ".join(h1) if h1 else "None", disabled=True)
                     
                 with content_col2:
-                    st.markdown("#### Keyword Analysis")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.5rem;">Keyword Analysis</div>', unsafe_allow_html=True)
                     st.markdown(f"**Keyword in Title:** {'✅ Yes' if title_has_keyword else '❌ No'}")
                     st.markdown(f"**Keyword in Meta:** {'✅ Yes' if meta_has_keyword else '❌ No'}")
                     st.markdown(f"**Keyword in H1:** {'✅ Yes' if h1_has_keyword else '❌ No'}")
@@ -1604,37 +1647,28 @@ if analyze_clicked:
                             st.markdown(f"- *{token}*: {count} times")
 
             with tab4:
-                st.markdown("### 🎯 Recommended Actions")
-                
-                # Group recommendations by priority
-                critical = [r for r in recommended_fixes if "CRITICAL" in r['Priority']]
-                high = [r for r in recommended_fixes if "HIGH" in r['Priority']]
-                medium = [r for r in recommended_fixes if "MEDIUM" in r['Priority']]
-                excellent = [r for r in recommended_fixes if "EXCELLENT" in r['Priority']]
-                
-                if critical:
-                    with st.expander(f"🔴 CRITICAL Issues ({len(critical)})", expanded=True):
-                        for rec in critical:
-                            st.error(f"**{rec['Issue']}**\n\n💡 {rec['Recommended Fix']}\n\n📊 Impact: {rec['Impact']}")
-                
-                if high:
-                    with st.expander(f"🟠 HIGH Priority ({len(high)})", expanded=False):
-                        for rec in high:
-                            st.warning(f"**{rec['Issue']}**\n\n💡 {rec['Recommended Fix']}\n\n📊 Impact: {rec['Impact']}")
-                
-                if medium:
-                    with st.expander(f"🟡 MEDIUM Priority ({len(medium)})", expanded=False):
-                        for rec in medium:
-                            st.info(f"**{rec['Issue']}**\n\n💡 {rec['Recommended Fix']}\n\n📊 Impact: {rec['Impact']}")
-                
-                if excellent:
-                    with st.expander(f"✅ Status: Excellent", expanded=False):
-                        for rec in excellent:
-                            st.success(f"**{rec['Issue']}**\n\n{rec['Recommended Fix']}")
+                st.markdown('<div class="section-header">Recommended Actions</div>', unsafe_allow_html=True)
+
+                _priority_groups = [
+                    ("CRITICAL", "#FF5252", critical if 'critical' in dir() else [r for r in recommended_fixes if "CRITICAL" in r['Priority']]),
+                    ("HIGH PRIORITY", "#FF9800", [r for r in recommended_fixes if "HIGH" in r['Priority']]),
+                    ("MEDIUM PRIORITY", "#FFD600", [r for r in recommended_fixes if "MEDIUM" in r['Priority']]),
+                ]
+                for _pg_label, _pg_color, _pg_items in _priority_groups:
+                    if not _pg_items:
+                        continue
+                    st.markdown(f'<div style="font-size:0.6rem;font-weight:800;color:{_pg_color};letter-spacing:0.18em;text-transform:uppercase;margin:1.2rem 0 0.6rem;">{_pg_label} ({len(_pg_items)})</div>', unsafe_allow_html=True)
+                    for rec in _pg_items:
+                        st.markdown(f"""<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);border-left:3px solid {_pg_color};border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.6rem;"><div style="font-size:0.88rem;font-weight:700;color:rgba(255,255,255,0.85);margin-bottom:0.4rem;">{rec['Issue']}</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.5);margin-bottom:0.3rem;">{rec['Recommended Fix']}</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.28);letter-spacing:0.04em;">Impact: {rec['Impact']}</div></div>""", unsafe_allow_html=True)
+
+                _excellent = [r for r in recommended_fixes if "EXCELLENT" in r['Priority']]
+                if _excellent:
+                    for rec in _excellent:
+                        st.markdown(f"""<div style="background:#0a0a0a;border:1px solid rgba(76,175,80,0.2);border-left:3px solid #4CAF50;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.6rem;"><div style="font-size:0.88rem;font-weight:700;color:#4CAF50;">✓ {rec['Issue']}</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:0.3rem;">{rec['Recommended Fix']}</div></div>""", unsafe_allow_html=True)
 
             with tab5:
-                st.markdown("### 🤖 GEO Score — AI Search Visibility")
-                st.caption("How well this page is optimized for ChatGPT, Claude, Perplexity, and Google AI Overviews")
+                st.markdown('<div class="section-header">GEO Score — AI Search Visibility</div>', unsafe_allow_html=True)
+                st.markdown('<div style="font-size:0.8rem;color:rgba(255,255,255,0.35);margin-bottom:1rem;">How well this page is optimized for ChatGPT, Claude, Perplexity, and Google AI Overviews</div>', unsafe_allow_html=True)
 
                 with st.spinner("Running GEO analysis..."):
                     geo_crawlers   = check_ai_crawlers(url)
@@ -1659,7 +1693,7 @@ if analyze_clicked:
                     st.markdown(f"**Band:** {geo_result['band']}")
 
                 with geo_col2:
-                    st.markdown("#### 📊 Score Breakdown")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.8rem;">Score Breakdown</div>', unsafe_allow_html=True)
                     breakdown = geo_result["breakdown"]
                     for key, data in breakdown.items():
                         label = {"citability": "Content Citability", "eeat": "E-E-A-T",
@@ -1675,7 +1709,7 @@ if analyze_clicked:
                 geo_c1, geo_c2 = st.columns(2)
 
                 with geo_c1:
-                    st.markdown("#### 🤖 AI Crawler Access")
+                    st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.5rem;">AI Crawler Access</div>', unsafe_allow_html=True)
                     st.caption(f"robots.txt score: **{geo_crawlers['score']}/100**")
                     for crawler in geo_crawlers["crawlers"]:
                         icon = "✅" if crawler["status"] == "allowed" else ("❌" if crawler["status"] == "blocked" else "⚠️")

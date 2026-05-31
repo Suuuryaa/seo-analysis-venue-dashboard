@@ -83,12 +83,28 @@ def _fetch_with_stealthy(url):
     return BeautifulSoup(html, "lxml"), html
 
 
+_SCRAPER_API_KEY = _os.environ.get("SCRAPER_API_KEY", "")
+
+
+def _fetch_with_scraperapi(url):
+    """Tier 3: ScraperAPI residential proxy — bypasses datacenter IP blocks (needs SCRAPER_API_KEY)."""
+    api_url = f"http://api.scraperapi.com?api_key={_SCRAPER_API_KEY}&url={url}&render=false"
+    resp = requests.get(api_url, timeout=60)
+    if resp.status_code != 200:
+        raise Exception(f"ScraperAPI returned HTTP {resp.status_code}")
+    html = resp.text
+    if len(html) < _MIN_HTML_BYTES:
+        raise Exception(f"ScraperAPI returned thin page ({len(html)} chars)")
+    return BeautifulSoup(html, "lxml"), html
+
+
 def get_page_soup(url):
     """
-    3-tier fetch strategy:
+    4-tier fetch strategy:
     1. Plain requests (fastest, works for ~70% of sites)
     2. Scrapling Fetcher / curl_cffi (TLS impersonation, bypasses most 403s)
-    3. Scrapling StealthyFetcher / Playwright (full browser, JS SPAs + Cloudflare)
+    3. ScraperAPI residential proxy (bypasses datacenter IP blocks — needs SCRAPER_API_KEY secret)
+    4. Scrapling StealthyFetcher / Playwright (full browser, JS SPAs + Cloudflare)
     """
     # ── Tier 1: plain requests ──────────────────────────────────────────────
     headers = {
@@ -138,15 +154,23 @@ def get_page_soup(url):
         except Exception as e:
             logger.info(f"Tier2 Fetcher failed for {url}: {e} — escalating to StealthyFetcher")
 
-    # ── Tier 3: StealthyFetcher (Playwright headless + Cloudflare solver) ───
+    # ── Tier 3: ScraperAPI residential proxy ────────────────────────────────
+    if _SCRAPER_API_KEY:
+        try:
+            logger.info(f"Tier3 ScraperAPI fetching {url}")
+            return _fetch_with_scraperapi(url)
+        except Exception as e:
+            logger.info(f"Tier3 ScraperAPI failed for {url}: {e} — escalating to StealthyFetcher")
+
+    # ── Tier 4: StealthyFetcher (Playwright headless + Cloudflare solver) ───
     if _STEALTHY_AVAILABLE:
         try:
-            logger.info(f"Tier3 StealthyFetcher fetching {url}")
+            logger.info(f"Tier4 StealthyFetcher fetching {url}")
             return _fetch_with_stealthy(url)
         except Exception as e:
-            raise Exception(f"All 3 fetch tiers failed for {url}. Last error: {e}")
+            raise Exception(f"All fetch tiers failed for {url}. Last error: {e}")
 
-    raise Exception(f"Could not fetch {url} — site blocks automated access and no stealth fetcher available.")
+    raise Exception(f"Could not fetch {url} — site blocks datacenter IPs. Add SCRAPER_API_KEY to Streamlit secrets to bypass.")
 
 
 # Keep tenacity retry on top for transient network errors

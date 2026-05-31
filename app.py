@@ -581,7 +581,18 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
 
         with col_gauge:
             st.plotly_chart(create_score_gauge(score), use_container_width=True)
-            st.markdown(f"**Score Band:** {get_score_band(score)}")
+            _band = get_score_band(score)
+            _band_color = "#00C853" if score >= 80 else ("#FF9800" if score >= 60 else "#EF5350")
+            st.markdown(
+                f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);'
+                f'border-left:3px solid {_band_color};border-radius:8px;'
+                f'padding:0.5rem 0.9rem;margin-top:0.3rem;display:inline-block;">'
+                f'<span style="font-size:0.55rem;font-weight:800;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:rgba(255,255,255,0.35);">Score Band</span>'
+                f'<div style="font-size:0.9rem;font-weight:700;color:{_band_color};margin-top:0.1rem;">{_band}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
         with col_metrics:
             st.markdown("<div class='section-header'>Key Metrics</div>", unsafe_allow_html=True)
@@ -641,14 +652,29 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
 
         with r3a:
             kw_present = sum([title_has_keyword, meta_has_keyword, h1_has_keyword, kc > 0])
-            st.plotly_chart(create_donut_chart(
-                labels=["Title", "Meta", "H1", "Body"],
-                values=[1 if title_has_keyword else 0, 1 if meta_has_keyword else 0,
-                        1 if h1_has_keyword else 0, 1 if kc > 0 else 0],
-                colors=["#00C853", "#FFA726", "#667eea", "#26C6DA"],
-                title="Keyword Placement",
-                center_text=f"{kw_present}/4<br><span style='font-size:11px'>covered</span>"
-            ), use_container_width=True)
+            st.markdown("<div class='section-header'>Keyword Placement</div>", unsafe_allow_html=True)
+            _kw_slots = [
+                ("Title Tag", title_has_keyword),
+                ("Meta Description", meta_has_keyword),
+                ("H1 Heading", h1_has_keyword),
+                ("Body Content", kc > 0),
+            ]
+            _cov_color = "#00C853" if kw_present == 4 else ("#FF9800" if kw_present >= 2 else "#EF5350")
+            st.markdown(
+                f'<div style="font-size:1.6rem;font-weight:800;color:{_cov_color};margin-bottom:0.8rem;">'
+                f'{kw_present}<span style="font-size:1rem;color:rgba(255,255,255,0.3);">/4 covered</span></div>',
+                unsafe_allow_html=True
+            )
+            for _slot, _hit in _kw_slots:
+                _ic = "✅" if _hit else "❌"
+                _sc = "rgba(255,255,255,0.7)" if _hit else "rgba(255,255,255,0.3)"
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">'
+                    f'<span>{_ic}</span>'
+                    f'<span style="font-size:0.82rem;color:{_sc};">{_slot}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
         with r3b:
             st.markdown("<div class='section-header'>Executive Summary</div>", unsafe_allow_html=True)

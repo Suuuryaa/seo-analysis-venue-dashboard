@@ -101,6 +101,12 @@ if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 if "show_admin_login" not in st.session_state:
     st.session_state.show_admin_login = False
+if "seo_data" not in st.session_state:
+    st.session_state.seo_data = None
+if "comp_data" not in st.session_state:
+    st.session_state.comp_data = None
+if "results_view" not in st.session_state:
+    st.session_state.results_view = "seo"
 
 # Session state for user-provided keys
 if "user_serper_key" not in st.session_state:
@@ -995,6 +1001,29 @@ hr { border-color: rgba(255,255,255,0.07) !important; margin: 2rem 0 !important;
 /* Fade-in for main content */
 .stMainBlockContainer { animation: fadeInUp 0.6s ease-out both; }
 
+/* ── Results toggle switcher ── */
+.results-toggle {
+    display: flex; gap: 0; margin: 2rem 0 0;
+    background: #0a0a0a; border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 50px; padding: 4px; width: fit-content;
+}
+.toggle-btn {
+    padding: 0.55rem 1.6rem; border-radius: 50px; border: none;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; cursor: pointer; transition: all 0.25s;
+    background: transparent; color: rgba(255,255,255,0.35);
+}
+.toggle-btn.active {
+    background: #B02025; color: #fff;
+    box-shadow: 0 2px 12px rgba(176,32,37,0.4);
+}
+.toggle-btn.has-data { color: rgba(255,255,255,0.6); }
+.toggle-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: #7EC7A3; margin-right: 6px; vertical-align: middle;
+    box-shadow: 0 0 6px #7EC7A3;
+}
+
 /* ── Remove Streamlit default top padding ── */
 header[data-testid="stHeader"] { display: none !important; }
 #root > div:nth-child(1) > div > div > div > div > section > div { padding-top: 0 !important; }
@@ -1402,8 +1431,20 @@ if analyze_clicked:
             if not _using_own_keys():
                 _increment_ip_uses(_ip_hash)
             _render_badge(_badge_placeholder)
+            # Store all SEO results in session state for persistent display
+            st.session_state.seo_data = dict(
+                url=url, keyword=keyword, score=score, summary=summary,
+                recommended_fixes=recommended_fixes, wc=wc, kc=kc, kd=kd,
+                internal=internal, external=external, missing_alt=missing_alt,
+                title=title, meta=meta, h1=h1,
+                title_has_keyword=title_has_keyword, meta_has_keyword=meta_has_keyword,
+                h1_has_keyword=h1_has_keyword, token_counts=token_counts,
+                token_coverage=token_coverage, title_len=title_len, meta_len=meta_len,
+                tech_seo=tech_seo, has_schema=has_schema, pagespeed_data=pagespeed_data,
+                soup=soup, compare_url=compare_url, venue_urls_text=venue_urls_text,
+            )
+            st.session_state.results_view = "seo"
             st.session_state.has_seo_results = True
-            st.session_state.seo_result_key = f"{url}::{keyword}"
 
             # ==================== DISPLAY RESULTS ====================
             from urllib.parse import urlparse as _urlp
@@ -2040,6 +2081,14 @@ if competitors_clicked:
             progress.empty()
             _patience_notice.empty()
 
+            # Store competitor results in session state
+            st.session_state.comp_data = dict(
+                url=url, keyword=keyword, country=country,
+                benchmark_rows=benchmark_rows,
+                gemini_competitors=gemini_competitors,
+            )
+            st.session_state.results_view = "comp"
+
             # ── Step 4: Display score comparison ────────────────────────────
             benchmark_df = pd.DataFrame(benchmark_rows)
 
@@ -2196,3 +2245,42 @@ if competitors_clicked:
 
         except Exception as e:
             st.error(f"❌ Competitor analysis error: {e}")
+
+# ==================== RESULTS TOGGLE SWITCHER ====================
+
+_has_seo  = st.session_state.seo_data is not None
+_has_comp = st.session_state.comp_data is not None
+
+if _has_seo or _has_comp:
+    st.markdown("<div style='margin-top:2rem;'></div>", unsafe_allow_html=True)
+
+    # ── Toggle buttons ─────────────────────────────────────────
+    _seo_dot  = '<span class="toggle-dot"></span>' if _has_seo else ''
+    _comp_dot = '<span class="toggle-dot"></span>' if _has_comp else ''
+    _seo_active  = "active" if st.session_state.results_view == "seo" else ("has-data" if _has_seo else "")
+    _comp_active = "active" if st.session_state.results_view == "comp" else ("has-data" if _has_comp else "")
+
+    st.markdown(f"""
+<div style="font-size:0.6rem;font-weight:800;color:rgba(255,255,255,0.25);
+            letter-spacing:0.18em;text-transform:uppercase;margin-bottom:0.6rem;">Results</div>
+<div class="results-toggle">
+    <span class="toggle-btn {_seo_active}" id="seo-toggle">{_seo_dot}SEO Analysis</span>
+    <span class="toggle-btn {_comp_active}" id="comp-toggle">{_comp_dot}Competitor Intel</span>
+</div>
+""", unsafe_allow_html=True)
+
+    _t1, _t2, _spacer = st.columns([1.4, 1.8, 8])
+    with _t1:
+        if st.button("SEO Analysis", key="view_seo",
+                     type="primary" if st.session_state.results_view == "seo" else "secondary",
+                     disabled=not _has_seo):
+            st.session_state.results_view = "seo"
+            st.rerun()
+    with _t2:
+        if st.button("Competitor Intel", key="view_comp",
+                     type="primary" if st.session_state.results_view == "comp" else "secondary",
+                     disabled=not _has_comp):
+            st.session_state.results_view = "comp"
+            st.rerun()
+
+    st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:1rem 0;'>", unsafe_allow_html=True)

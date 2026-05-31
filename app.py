@@ -1988,7 +1988,8 @@ if competitors_clicked:
             benchmark_rows = []
             progress = st.progress(0)
             total = len(gemini_competitors) + 1
-            st.markdown("""
+            _patience_notice = st.empty()
+            _patience_notice.markdown("""
 <div style="background:rgba(126,199,163,0.06);border:1px solid rgba(126,199,163,0.15);
             border-left:3px solid #7EC7A3;border-radius:10px;padding:0.9rem 1.2rem;
             font-size:0.83rem;color:rgba(255,255,255,0.6);line-height:1.6;">
@@ -2032,11 +2033,12 @@ if competitors_clicked:
                         })
                 progress.progress((idx + 2) / total)
 
-            progress.empty()
-
             if not benchmark_rows:
                 st.warning("No data to display.")
                 st.stop()
+
+            progress.empty()
+            _patience_notice.empty()
 
             # ── Step 4: Display score comparison ────────────────────────────
             benchmark_df = pd.DataFrame(benchmark_rows)
@@ -2081,7 +2083,7 @@ if competitors_clicked:
                     color="Role",
                     text="SEO Score",
                     orientation="h",
-                    color_discrete_map={"🏠 Primary Venue": "#B02025", "🎯 Competitor": "#3a3a3a"},
+                    color_discrete_map={"🏠 Primary Venue": "#B02025", "🎯 Competitor": "#555555"},
                     title=f"SEO Score vs Competitors — '{keyword}'"
                 )
                 fig.update_traces(textposition="outside", textfont_size=11,

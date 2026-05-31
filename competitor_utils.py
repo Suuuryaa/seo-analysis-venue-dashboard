@@ -230,30 +230,55 @@ def get_competitors_via_gemini(url, keyword, gemini_api_key, location=None):
     """
     import requests as _req
 
-    country_hint = ""
-    if location and location.get("country_name"):
-        country_hint = f"The business operates in {location['country_name']}. Prioritise competitors active in that market with local domains where possible."
-
     domain = _get_domain(url)
 
-    prompt = f"""You are a competitive intelligence analyst.
+    # Infer country from TLD or location object
+    tld = domain.split(".")[-1].lower()
+    tld_country_map = {
+        "co.nz": "New Zealand", "nz": "New Zealand",
+        "com.au": "Australia",  "au": "Australia",
+        "co.uk": "United Kingdom", "uk": "United Kingdom",
+        "ca": "Canada", "ie": "Ireland", "sg": "Singapore",
+        "co.in": "India", "in": "India",
+    }
+    # Check two-part TLDs first
+    two_part = ".".join(domain.split(".")[-2:])
+    country = tld_country_map.get(two_part) or tld_country_map.get(tld) or ""
+    if location and location.get("country_name"):
+        country = location["country_name"]
 
-Given this business website: {url} (domain: {domain})
-Target keyword context: "{keyword}"
-{country_hint}
+    country_line = f"Market / Country: {country}" if country else ""
 
-Identify 6-8 DIRECT competitor businesses — companies that sell similar products/services and compete for the same customers.
-Do NOT include: directories, review sites, news sites, social media, analyst platforms (CBInsights, Crunchbase, G2), or the business itself.
+    prompt = f"""You are a competitive intelligence analyst specialising in brand-level SEO competitors.
 
-Return ONLY a valid JSON array with no markdown fences or explanation:
+Business website: {url}
+Domain: {domain}
+Target keyword: "{keyword}"
+{country_line}
+
+TASK: Identify 8-10 DIRECT BRAND competitors — real companies that:
+- Sell the same or very similar products/services as this business
+- Compete for the same customers in the same market/country
+- Have their own e-commerce or business website
+
+RULES:
+- Infer the brand name and industry from the domain (e.g. calvinklein.co.nz = Calvin Klein, fashion/apparel, New Zealand)
+- Return competitors that are real brands in the same industry and geography
+- Prefer local/country-specific domains (e.g. nz.tommy.com, hm.com/en_nz) over generic global ones
+- EXCLUDE: Reddit, Quora, Wikipedia, YouTube, news sites, directories (Yelp, TripAdvisor), social media, job boards, analyst sites
+- EXCLUDE: the business itself
+
+EXAMPLES of good competitors for calvinklein.co.nz: Tommy Hilfiger NZ, H&M NZ, Hallensteins, Glassons, Bonds NZ, Kathmandu, Country Road, etc.
+
+Return ONLY a raw JSON array — no explanation, no markdown fences, no extra text:
 [
-  {{"name": "Brand Name", "domain": "example.com", "website": "https://example.com"}},
-  ...
+  {{"name": "Brand Name", "domain": "example.co.nz", "website": "https://example.co.nz"}},
+  {{"name": "Brand Name 2", "domain": "example.com", "website": "https://example.com/en-nz/"}}
 ]"""
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024}
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}
     }
 
     # Discover available models for this API key — also validates the key early
@@ -307,7 +332,7 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
     last_error = None
     quota_errors = []
 
-    for model in available_models[:5]:
+    for model in available_models[:8]:
         for api_ver in ["v1beta", "v1"]:
             endpoint = (
                 f"https://generativelanguage.googleapis.com/{api_ver}"

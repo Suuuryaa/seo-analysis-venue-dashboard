@@ -90,6 +90,18 @@ def _increment_ip_uses(ip_hash):
 _client_ip = _get_client_ip()
 _ip_hash = _hash_ip(_client_ip)
 
+# ==================== ADMIN MODE ====================
+_admin_password = ""
+try:
+    _admin_password = st.secrets["ADMIN_PASSWORD"]
+except Exception:
+    pass
+
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+if "show_admin_login" not in st.session_state:
+    st.session_state.show_admin_login = False
+
 # Session state for user-provided keys
 if "user_serper_key" not in st.session_state:
     st.session_state.user_serper_key = ""
@@ -104,7 +116,9 @@ def _using_own_keys():
     return bool(st.session_state.user_serper_key and st.session_state.user_gemini_key)
 
 def _active_keys():
-    """Return the keys to actually use — user's own if provided, else built-in."""
+    """Return (serp, gemini, pagespeed, scraperapi) keys to use."""
+    if st.session_state.is_admin:
+        return (_default_serper, _default_gemini, _default_pagespeed, "")
     if _using_own_keys():
         return (
             st.session_state.user_serper_key,
@@ -115,8 +129,8 @@ def _active_keys():
     return (_default_serper, _default_gemini, _default_pagespeed, "")
 
 def _check_limit():
-    """Return (allowed, remaining). If using own keys, always allowed."""
-    if _using_own_keys():
+    """Return (allowed, remaining). Admins and own-key users always allowed."""
+    if st.session_state.is_admin or _using_own_keys():
         return True, 999
     used = _get_ip_uses(_ip_hash)
     remaining = max(0, IP_LIMIT - used)
@@ -956,10 +970,55 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ==================== ADMIN CORNER BUTTON ====================
+st.markdown("""
+<style>
+.admin-corner {
+    position: fixed; bottom: 18px; right: 18px; z-index: 9999;
+    opacity: 0.18; transition: opacity 0.3s;
+}
+.admin-corner:hover { opacity: 0.7; }
+</style>
+""", unsafe_allow_html=True)
+
+# Tiny fixed button — rendered via a hidden column trick
+_acol1, _acol2 = st.columns([20, 1])
+with _acol2:
+    if st.button("🔒", key="admin_btn", help="Admin"):
+        st.session_state.show_admin_login = not st.session_state.show_admin_login
+
+if st.session_state.show_admin_login and not st.session_state.is_admin:
+    with st.container():
+        st.markdown("""
+<div style="background:#0d0d0d;border:1px solid rgba(255,215,0,0.15);border-radius:12px;
+            padding:1rem 1.4rem;margin-bottom:0.5rem;max-width:320px;">
+    <div style="font-size:0.6rem;font-weight:800;color:rgba(255,215,0,0.5);
+                letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;">Admin Access</div>
+""", unsafe_allow_html=True)
+        _pwd = st.text_input("Password", type="password", key="admin_pwd_input", label_visibility="collapsed")
+        if _pwd:
+            if _admin_password and _pwd == _admin_password:
+                st.session_state.is_admin = True
+                st.session_state.show_admin_login = False
+                st.rerun()
+            else:
+                st.markdown('<div style="font-size:0.75rem;color:#FF5252;">Incorrect password.</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+if st.session_state.is_admin:
+    _acol_a, _acol_b = st.columns([20, 1])
+    with _acol_b:
+        if st.button("🔓", key="admin_logout_btn", help="Logout admin"):
+            st.session_state.is_admin = False
+            st.rerun()
+
 # ==================== INPUT SECTION ====================
 
 def _render_badge(placeholder):
-    if _using_own_keys():
+    if st.session_state.is_admin:
+        badge_text = '<strong style="color:#FFD600;">Admin</strong>'
+        dot_color = "#FFD600"
+    elif _using_own_keys():
         badge_text = '<strong style="color:#7EC7A3;">Unlimited</strong>'
         dot_color = "#7EC7A3"
     else:

@@ -7,54 +7,72 @@ import time
 from tenacity import retry, stop_after_attempt, wait_exponential
 import json
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Try to import Scrapling's curl_cffi-based Fetcher for bot-protected sites
+try:
+    from scrapling.fetchers import Fetcher as _ScraplingFetcher
+    _SCRAPLING_AVAILABLE = True
+except Exception:
+    _SCRAPLING_AVAILABLE = False
+
+
+def _scrapling_fetch(url):
+    """Use Scrapling (curl_cffi TLS impersonation) to bypass bot protection."""
+    resp = _ScraplingFetcher.get(url, timeout=30, follow_redirects=True, stealthy_headers=True)
+    if resp.status not in (200, 206):
+        raise Exception(f"Scrapling got HTTP {resp.status} from {url}")
+    html = resp.html_content if hasattr(resp, "html_content") else str(resp.content)
+    return BeautifulSoup(html, "lxml"), html
+
 
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=2, max=6),
     reraise=True
 )
 def get_page_soup(url):
-    """
-    Fetch and parse a web page with retry logic.
-    
-    Args:
-        url (str): Target URL to fetch
-        
-    Returns:
-        tuple: (BeautifulSoup object, raw HTML string)
-        
-    Raises:
-        requests.RequestException: If fetch fails after retries
-    """
+    """Fetch page with plain requests; fall back to Scrapling (curl_cffi) if blocked."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
     }
 
     try:
-        logger.info(f"Fetching URL: {url}")
-        response = requests.get(url, headers=headers, timeout=30, allow_redirects=True)
-        response.raise_for_status()
-        logger.info(f"Successfully fetched {url}")
-        return BeautifulSoup(response.text, "lxml"), response.text
+        resp = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
+        # Treat 403/429/503 as blocked — try Scrapling fallback
+        if resp.status_code in (403, 429, 503) and _SCRAPLING_AVAILABLE:
+            logger.info(f"Got {resp.status_code} from {url}, retrying with Scrapling")
+            return _scrapling_fetch(url)
+        resp.raise_for_status()
+        return BeautifulSoup(resp.text, "lxml"), resp.text
+
     except requests.exceptions.Timeout:
-        raise requests.exceptions.Timeout(
-            f"Timed out fetching {url}. Large corporate sites (DHL, FedEx, etc.) often block automated requests. Try a smaller/independent site URL."
-        )
+        raise requests.exceptions.Timeout(f"Timed out fetching {url}.")
     except requests.exceptions.HTTPError as e:
-        raise requests.exceptions.HTTPError(
-            f"HTTP {e.response.status_code} from {url}. The site may be blocking bots or require login."
-        )
+        code = e.response.status_code if e.response is not None else "?"
+        # Try Scrapling for any HTTP error if available
+        if _SCRAPLING_AVAILABLE:
+            logger.info(f"HTTP {code} from {url}, trying Scrapling fallback")
+            try:
+                return _scrapling_fetch(url)
+            except Exception as se:
+                raise Exception(f"Blocked ({code}): {url} — even stealth fetch failed: {se}")
+        raise Exception(f"HTTP {code} from {url} — site blocks automated access.")
     except requests.RequestException as e:
-        logger.error(f"Failed to fetch {url}: {e}")
+        if _SCRAPLING_AVAILABLE:
+            try:
+                return _scrapling_fetch(url)
+            except Exception:
+                pass
         raise
 
 

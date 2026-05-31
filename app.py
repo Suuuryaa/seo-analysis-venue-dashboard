@@ -957,8 +957,9 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
                 _is_crit = crawler["priority"] == "critical"
                 st.markdown(
                     f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                    f'padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
-                    f'<span style="font-size:0.75rem;color:rgba(255,255,255,{"0.7" if _is_crit else "0.45"});'
+                    f'padding:0.45rem 0.6rem;margin-bottom:0.3rem;'
+                    f'background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);border-radius:6px;">'
+                    f'<span style="font-size:0.75rem;color:rgba(255,255,255,{"0.75" if _is_crit else "0.45"});'
                     f'font-weight:{"600" if _is_crit else "400"};">{crawler["name"]}</span>'
                     f'<span style="font-size:0.72rem;font-weight:700;color:{_cc};">{_ci} {_cs}</span>'
                     f'</div>',
@@ -1009,9 +1010,10 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
                 _ei = "✓" if passed else "✗"
                 st.markdown(
                     f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                    f'padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
+                    f'padding:0.45rem 0.6rem;margin-bottom:0.3rem;'
+                    f'background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);border-radius:6px;">'
                     f'<span style="font-size:0.75rem;color:rgba(255,255,255,0.55);">{label}</span>'
-                    f'<span style="font-size:0.72rem;font-weight:700;color:{_ec};">{_ei}</span>'
+                    f'<span style="font-size:0.75rem;font-weight:700;color:{_ec};">{_ei}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -1039,12 +1041,27 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
             )
 
         if geo_citability.get("top_blocks"):
-            st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
-            with st.expander("Top Citable Content Blocks", expanded=False):
+            st.markdown("<div style='margin-top:1.2rem;'></div>", unsafe_allow_html=True)
+            if "show_cit_blocks" not in st.session_state:
+                st.session_state.show_cit_blocks = False
+            _cit_toggle_label = "— Hide Content Blocks" if st.session_state.show_cit_blocks else "+ Top Citable Content Blocks"
+            if st.button(_cit_toggle_label, key="toggle_cit_blocks", type="secondary"):
+                st.session_state.show_cit_blocks = not st.session_state.show_cit_blocks
+                st.rerun()
+            if st.session_state.show_cit_blocks:
                 for block in geo_citability["top_blocks"][:3]:
-                    st.markdown(f"**{block.get('heading', 'No heading')}** — Score: {block['score']}/100 ({block['grade']}) | {block['word_count']} words")
-                    st.caption(block.get("preview", ""))
-                    st.markdown("---")
+                    st.markdown(
+                        f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);'
+                        f'border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.6rem;">'
+                        f'<div style="font-size:0.82rem;font-weight:700;color:rgba(255,255,255,0.8);margin-bottom:0.3rem;">'
+                        f'{block.get("heading","No heading")}</div>'
+                        f'<div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:0.4rem;">'
+                        f'Score: {block["score"]}/100 · {block["grade"]} · {block["word_count"]} words</div>'
+                        f'<div style="font-size:0.75rem;color:rgba(255,255,255,0.45);font-style:italic;">'
+                        f'{block.get("preview","")}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
 
     # Comparison Section (if URL provided)
     if compare_url:

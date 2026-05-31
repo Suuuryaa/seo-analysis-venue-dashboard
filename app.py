@@ -1300,7 +1300,7 @@ if competitors_clicked:
                             "Venue Name": comp_name,
                             "URL": comp_url,
                             "SEO Score": 0,
-                            "Score Band": "Error",
+                            "Score Band": "Blocked",
                             "Role": "🎯 Competitor",
                             "Word Count": 0, "Keyword Count": 0,
                             "Keyword Density": 0, "Internal Links": 0,
@@ -1318,12 +1318,12 @@ if competitors_clicked:
             # ── Step 4: Display score comparison ────────────────────────────
             benchmark_df = pd.DataFrame(benchmark_rows)
 
-            # Separate errors from valid results
-            error_rows = [r for r in benchmark_rows if r.get("Score Band") == "Error"]
-            valid_rows = [r for r in benchmark_rows if r.get("Score Band") != "Error"]
+            # Separate blocked from valid results
+            error_rows = [r for r in benchmark_rows if r.get("Score Band") == "Blocked"]
+            valid_rows = [r for r in benchmark_rows if r.get("Score Band") != "Blocked"]
 
             if error_rows:
-                blocked = [r["Venue Name"] if r["Venue Name"] != "Error" else r["URL"] for r in error_rows]
+                blocked = [r["Venue Name"] for r in error_rows]
                 st.warning(f"⚠️ {len(error_rows)} site(s) blocked automated access (common for large corporate sites): {', '.join(blocked)}")
 
             primary_row = next((r for r in valid_rows if "Primary" in r.get("Role", "")), None)

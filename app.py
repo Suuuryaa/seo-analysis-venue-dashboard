@@ -1053,18 +1053,20 @@ def _render_comp_results(d):
             keyword=keyword
         )
 
-        with st.spinner("Generating AI analysis report..."):
-            ai_summary = generate_ai_executive_summary(
-                gemini_api_key=gemini_api_key,
-                primary_name=primary_row.get("Venue Name", url),
-                keyword=keyword,
-                primary_rank="N/A",
-                primary_score=primary_row.get("SEO Score", 0),
-                top_competitor=best_comp_name,
-                strategic_insights=insights,
-                recommended_fixes=[],
-                benchmark_rows=benchmark_rows,
-            )
+        if "ai_summary" not in d or not d["ai_summary"]:
+            with st.spinner("Generating AI analysis report..."):
+                d["ai_summary"] = generate_ai_executive_summary(
+                    gemini_api_key=gemini_api_key,
+                    primary_name=primary_row.get("Venue Name", url),
+                    keyword=keyword,
+                    primary_rank="N/A",
+                    primary_score=primary_row.get("SEO Score", 0),
+                    top_competitor=best_comp_name,
+                    strategic_insights=insights,
+                    recommended_fixes=[],
+                    benchmark_rows=benchmark_rows,
+                )
+        ai_summary = d["ai_summary"]
         if ai_summary:
             import re as _re
             section_colors = {

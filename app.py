@@ -907,43 +907,94 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
                 create_score_gauge(geo_result["score"], title="GEO Score"),
                 use_container_width=True
             )
-            st.markdown(f"**Band:** {geo_result['band']}")
+            _geo_band_color = "#00C853" if geo_result["score"] >= 80 else ("#FF9800" if geo_result["score"] >= 60 else "#EF5350")
+            st.markdown(
+                f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);'
+                f'border-left:3px solid {_geo_band_color};border-radius:8px;'
+                f'padding:0.5rem 0.9rem;margin-top:0.3rem;display:inline-block;">'
+                f'<span style="font-size:0.55rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.35);">Band</span>'
+                f'<div style="font-size:0.9rem;font-weight:700;color:{_geo_band_color};margin-top:0.1rem;">{geo_result["band"]}</div>'
+                f'</div>', unsafe_allow_html=True
+            )
 
         with geo_col2:
             st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.8rem;">Score Breakdown</div>', unsafe_allow_html=True)
             breakdown = geo_result["breakdown"]
+            _bd_labels = {"citability": "Content Citability", "eeat": "E-E-A-T",
+                          "crawlers": "AI Crawler Access", "schema": "Schema Markup", "llmstxt": "llms.txt"}
             for key, data in breakdown.items():
-                label = {"citability": "Content Citability", "eeat": "E-E-A-T",
-                         "crawlers": "AI Crawler Access", "schema": "Schema Markup",
-                         "llmstxt": "llms.txt"}.get(key, key)
+                label = _bd_labels.get(key, key)
                 bar_pct = int(data["score"])
-                st.markdown(f"**{label}** — {bar_pct}/100")
-                st.progress(bar_pct / 100)
+                _bc = "#00C853" if bar_pct >= 80 else ("#FF9800" if bar_pct >= 50 else "#EF5350")
+                st.markdown(
+                    f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);'
+                    f'border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">'
+                    f'<span style="font-size:0.78rem;color:rgba(255,255,255,0.6);">{label}</span>'
+                    f'<span style="font-size:0.78rem;font-weight:700;color:{_bc};">{bar_pct}/100</span>'
+                    f'</div>'
+                    f'<div style="background:rgba(255,255,255,0.06);border-radius:4px;height:4px;">'
+                    f'<div style="background:{_bc};width:{bar_pct}%;height:4px;border-radius:4px;"></div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True
+                )
 
-        st.markdown("---")
+        st.markdown("<div style='margin:1.5rem 0;border-top:1px solid rgba(255,255,255,0.06);'></div>", unsafe_allow_html=True)
 
         geo_c1, geo_c2 = st.columns(2)
 
         with geo_c1:
-            st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.5rem;">AI Crawler Access</div>', unsafe_allow_html=True)
-            st.caption(f"robots.txt score: **{geo_crawlers['score']}/100**")
+            st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.6rem;">AI Crawler Access</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:0.6rem;">'
+                f'robots.txt score: <span style="color:#B02025;font-weight:700;">{geo_crawlers["score"]}/100</span></div>',
+                unsafe_allow_html=True
+            )
             for crawler in geo_crawlers["crawlers"]:
-                icon = "✅" if crawler["status"] == "allowed" else ("❌" if crawler["status"] == "blocked" else "⚠️")
-                badge = "🔴" if crawler["priority"] == "critical" else "🟡"
-                st.markdown(f"{icon} {badge} **{crawler['name']}** — {crawler['status']}")
-            sitemap_icon = "✅" if geo_crawlers["has_sitemap"] else "❌"
-            st.markdown(f"{sitemap_icon} Sitemap in robots.txt")
+                _cs = crawler["status"]
+                _cc = "#00C853" if _cs == "allowed" else ("#EF5350" if _cs == "blocked" else "#FF9800")
+                _ci = "✓" if _cs == "allowed" else ("✗" if _cs == "blocked" else "–")
+                _is_crit = crawler["priority"] == "critical"
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                    f'padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
+                    f'<span style="font-size:0.75rem;color:rgba(255,255,255,{"0.7" if _is_crit else "0.45"});'
+                    f'font-weight:{"600" if _is_crit else "400"};">{crawler["name"]}</span>'
+                    f'<span style="font-size:0.72rem;font-weight:700;color:{_cc};">{_ci} {_cs}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            _sm_c = "#00C853" if geo_crawlers["has_sitemap"] else "#EF5350"
+            _sm_i = "✓" if geo_crawlers["has_sitemap"] else "✗"
+            st.markdown(
+                f'<div style="font-size:0.72rem;font-weight:600;color:{_sm_c};margin-top:0.6rem;">'
+                f'{_sm_i} Sitemap in robots.txt</div>',
+                unsafe_allow_html=True
+            )
 
         with geo_c2:
-            st.markdown("#### 📄 llms.txt & E-E-A-T")
-
+            st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.6rem;">llms.txt</div>', unsafe_allow_html=True)
             if geo_llmstxt["exists"]:
-                st.success(f"✅ llms.txt found — {geo_llmstxt['sections']} sections, {geo_llmstxt['links']} links")
+                st.markdown(
+                    f'<div style="background:rgba(0,200,83,0.06);border:1px solid rgba(0,200,83,0.2);'
+                    f'border-left:3px solid #00C853;border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.8rem;">'
+                    f'<span style="font-size:0.78rem;color:#00C853;font-weight:600;">✓ llms.txt found</span>'
+                    f'<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:0.2rem;">'
+                    f'{geo_llmstxt["sections"]} sections · {geo_llmstxt["links"]} links</div></div>',
+                    unsafe_allow_html=True
+                )
             else:
-                st.warning("❌ No llms.txt found — consider adding one to guide AI crawlers")
-                st.markdown("[What is llms.txt?](https://llmstxt.org)")
+                st.markdown(
+                    f'<div style="background:rgba(239,83,80,0.06);border:1px solid rgba(239,83,80,0.2);'
+                    f'border-left:3px solid #EF5350;border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.4rem;">'
+                    f'<span style="font-size:0.78rem;color:#EF5350;font-weight:600;">✗ No llms.txt found</span>'
+                    f'<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:0.2rem;">'
+                    f'Consider adding one to guide AI crawlers</div></div>',
+                    unsafe_allow_html=True
+                )
+                st.markdown('<a href="https://llmstxt.org" target="_blank" style="font-size:0.72rem;color:#667eea;">What is llms.txt?</a>', unsafe_allow_html=True)
 
-            st.markdown("**E-E-A-T Signals**")
+            st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0.8rem 0 0.5rem;">E-E-A-T Signals</div>', unsafe_allow_html=True)
             signals = geo_eeat["signals"]
             eeat_items = [
                 ("Author byline",    signals.get("has_author", False)),
@@ -954,22 +1005,42 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
                 ("HTTPS",            signals.get("has_https", False)),
             ]
             for label, passed in eeat_items:
-                st.markdown(status_indicator(passed, label), unsafe_allow_html=True)
+                _ec = "#00C853" if passed else "#EF5350"
+                _ei = "✓" if passed else "✗"
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                    f'padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
+                    f'<span style="font-size:0.75rem;color:rgba(255,255,255,0.55);">{label}</span>'
+                    f'<span style="font-size:0.72rem;font-weight:700;color:{_ec};">{_ei}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
-        st.markdown("---")
+        st.markdown("<div style='margin:1.5rem 0;border-top:1px solid rgba(255,255,255,0.06);'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Content Citability</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-bottom:1rem;">How likely AI models are to directly quote/cite content from this page</div>', unsafe_allow_html=True)
 
-        st.markdown("#### ✍️ Content Citability")
-        st.caption("How likely AI models are to directly quote/cite content from this page")
         cit_col1, cit_col2, cit_col3 = st.columns(3)
-        with cit_col1:
-            st.metric("Citability Score", f"{geo_citability['score']}/100")
-        with cit_col2:
-            st.metric("Grade", f"{geo_citability['grade']} — {geo_citability['grade_label']}")
-        with cit_col3:
-            st.metric("Optimal Blocks", f"{geo_citability['optimal_blocks']} / {geo_citability['blocks_analyzed']}")
+        _cit_score = geo_citability["score"]
+        _cit_color = "#00C853" if _cit_score >= 80 else ("#FF9800" if _cit_score >= 50 else "#EF5350")
+        for col, lbl, val in zip(
+            [cit_col1, cit_col2, cit_col3],
+            ["Citability Score", "Grade", "Optimal Blocks"],
+            [f"{_cit_score}/100", f"{geo_citability['grade']} — {geo_citability['grade_label']}", f"{geo_citability['optimal_blocks']} / {geo_citability['blocks_analyzed']}"]
+        ):
+            col.markdown(
+                f'<div style="background:#0a0a0a;border:1px solid rgba(255,255,255,0.06);'
+                f'border-top:2px solid {_cit_color};border-radius:10px;padding:1rem;text-align:center;">'
+                f'<div style="font-size:1.4rem;font-weight:800;color:{_cit_color};line-height:1;">{val}</div>'
+                f'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.3);margin-top:0.3rem;">{lbl}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
         if geo_citability.get("top_blocks"):
-            with st.expander("📋 Top Citable Content Blocks", expanded=False):
+            st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
+            with st.expander("Top Citable Content Blocks", expanded=False):
                 for block in geo_citability["top_blocks"][:3]:
                     st.markdown(f"**{block.get('heading', 'No heading')}** — Score: {block['score']}/100 ({block['grade']}) | {block['word_count']} words")
                     st.caption(block.get("preview", ""))

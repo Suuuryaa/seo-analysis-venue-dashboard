@@ -270,15 +270,12 @@ RULES:
 
 EXAMPLES of good competitors for calvinklein.co.nz: Tommy Hilfiger NZ, H&M NZ, Hallensteins, Glassons, Bonds NZ, Kathmandu, Country Road, etc.
 
-Return ONLY a raw JSON array — no explanation, no markdown fences, no extra text:
-[
-  {{"name": "Brand Name", "domain": "example.co.nz", "website": "https://example.co.nz"}},
-  {{"name": "Brand Name 2", "domain": "example.com", "website": "https://example.com/en-nz/"}}
-]"""
+Return ONLY a compact JSON array on a single line — no explanation, no markdown, no newlines inside the array:
+[{{"name":"Brand","domain":"example.co.nz","website":"https://example.co.nz"}},{{"name":"Brand2","domain":"example.com","website":"https://example.com"}}]"""
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 8192}
     }
 
     # Discover available models for this API key — also validates the key early

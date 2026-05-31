@@ -914,7 +914,7 @@ keyword = st.text_input("🔑 Target Keyword", placeholder="e.g. running shoes, 
 if "show_compare_urls" not in st.session_state:
     st.session_state.show_compare_urls = False
 
-toggle_label = "▲  COMPARE SPECIFIC URLS" if st.session_state.show_compare_urls else "▼  COMPARE SPECIFIC URLS  —  optional"
+toggle_label = "— COMPARE SPECIFIC URLS" if st.session_state.show_compare_urls else "+ COMPARE SPECIFIC URLS  (optional)"
 if st.button(toggle_label, key="toggle_compare", type="secondary"):
     st.session_state.show_compare_urls = not st.session_state.show_compare_urls
 

@@ -2164,7 +2164,7 @@ if competitors_clicked:
                         "priority": "#FFD600",
                         "conclusion": "#7EC7A3",
                     }
-                    sections = _re.split(r'\n##\s+', "\n" + ai_summary)
+                    sections = _re.split(r'\n#{1,3}\s+', "\n" + ai_summary)
                     for sec in sections:
                         if not sec.strip():
                             continue

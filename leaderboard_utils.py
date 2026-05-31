@@ -109,10 +109,10 @@ def analyze_venue(url, keyword):
     except Exception as e:
         logger.error(f"Error analyzing {url}: {e}")
         return {
-            "Venue Name": get_venue_name(url, "Error"),
+            "Venue Name": get_venue_name(url, urlparse(url).netloc or url),
             "URL": url,
             "SEO Score": 0,
-            "Score Band": "Error",
+            "Score Band": "Blocked",
             "Word Count": 0,
             "Keyword Count": 0,
             "Keyword Density": 0,

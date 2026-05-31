@@ -941,7 +941,7 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
 
         st.markdown("<div style='margin:1.5rem 0;border-top:1px solid rgba(255,255,255,0.06);'></div>", unsafe_allow_html=True)
 
-        geo_c1, geo_c2 = st.columns(2)
+        geo_c1, geo_c2 = st.columns([1.2, 1], gap="large")
 
         with geo_c1:
             st.markdown('<div style="font-size:0.65rem;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.14em;text-transform:uppercase;margin:0 0 0.6rem;">AI Crawler Access</div>', unsafe_allow_html=True)

@@ -961,11 +961,11 @@ table{{font-size:0.85rem;}} th,td{{padding:6px 10px;text-align:left;}}
                 _fw = "600" if _is_crit else "400"
                 _fc = "rgba(255,255,255,0.75)" if _is_crit else "rgba(255,255,255,0.45)"
                 _crawler_rows_html += (
-                    f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                    f'<div style="display:flex;align-items:center;gap:1rem;'
                     f'padding:0.4rem 0.6rem;margin-bottom:2px;'
                     f'background:#0a0a0a;border:1px solid rgba(255,255,255,0.05);border-radius:6px;">'
-                    f'<span style="font-size:0.75rem;color:{_fc};font-weight:{_fw};">{crawler["name"]}</span>'
-                    f'<span style="font-size:0.72rem;font-weight:700;color:{_cc};">{_ci} {_cs}</span>'
+                    f'<span style="font-size:0.75rem;color:{_fc};font-weight:{_fw};flex:1;">{crawler["name"]}</span>'
+                    f'<span style="font-size:0.72rem;font-weight:700;color:{_cc};white-space:nowrap;">{_ci} {_cs}</span>'
                     f'</div>'
                 )
             _sm_c = "#00C853" if geo_crawlers["has_sitemap"] else "#EF5350"

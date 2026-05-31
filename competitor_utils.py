@@ -260,25 +260,18 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
             )
             try:
                 resp = _req.post(endpoint, json=payload, timeout=30)
+
                 if resp.status_code == 429:
-                    body = resp.text.lower()
-                    if "spending" in body or "budget" in body or "billing" in body:
-                        raise RuntimeError("SPENDING_CAP_429")
-                    # Rate limit — wait and retry once before giving up
-                    retry_after = int(resp.headers.get("Retry-After", 35))
-                    time.sleep(min(retry_after, 60))
-                    resp2 = _req.post(endpoint, json=payload, timeout=30)
-                    if resp2.status_code == 200:
-                        resp = resp2
-                    else:
-                        raise RuntimeError(f"RATE_LIMIT_429: {resp.text[:300]}")
+                    # Surface the exact Google error so it can be diagnosed
+                    raw = resp.text
+                    raise RuntimeError(f"QUOTA_429||{raw[:500]}")
+
                 if resp.status_code in (401, 403):
-                    # Key-level failure — no point trying more models or versions
                     code = resp.status_code
                     raise RuntimeError(
-                        f"INVALID_API_KEY_{code}: Gemini API key rejected ({code}). "
-                        "Check GEMINI_API_KEY in Streamlit Cloud secrets."
+                        f"INVALID_API_KEY_{code}||Gemini key rejected ({code}): {resp.text[:200]}"
                     )
+
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -291,19 +284,14 @@ Return ONLY a valid JSON array with no markdown fences or explanation:
                         competitors = json.loads(text.strip())
                         return competitors if isinstance(competitors, list) else []
                     except json.JSONDecodeError:
-                        last_error = f"{model}/{api_ver} → truncated/invalid JSON (spending cap?)"
+                        last_error = f"{model}/{api_ver} → invalid JSON in response"
                         continue
-                last_error = f"{model}/{api_ver} → {resp.status_code}: {resp.text[:200]}"
-            except RuntimeError as e:
-                err_str = str(e)
-                if "SPENDING_CAP_429" in err_str:
-                    raise RuntimeError("SPENDING_CAP: monthly budget exceeded")
-                if "RATE_LIMIT_429" in err_str:
-                    raise RuntimeError(err_str)
-                if "INVALID_API_KEY" in err_str or "FORBIDDEN" in err_str:
-                    raise
-                last_error = f"{model}/{api_ver} → {e}"
+
+                last_error = f"{model}/{api_ver} → HTTP {resp.status_code}: {resp.text[:200]}"
+
+            except RuntimeError:
+                raise
             except Exception as e:
                 last_error = f"{model}/{api_ver} → {e}"
 
-    raise RuntimeError(f"All Gemini endpoints failed. Models tried: {available_models[:5]}. Last error: {last_error}")
+    raise RuntimeError(f"ALL_FAILED||Models tried: {available_models[:5]}. Last error: {last_error}")

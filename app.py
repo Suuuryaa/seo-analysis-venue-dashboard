@@ -1237,14 +1237,27 @@ if competitors_clicked:
                     gemini_competitors = get_competitors_via_gemini(url, keyword, gemini_api_key, location)
                 except Exception as e:
                     err_str = str(e)
-                    if "SPENDING_CAP" in err_str or "spending cap" in err_str:
-                        st.error("💳 **Gemini monthly budget exceeded.** Go to [aistudio.google.com/spend](https://aistudio.google.com/spend) to increase your spend cap.")
-                    elif "RATE_LIMIT_429" in err_str or ("429" in err_str and "SPENDING" not in err_str):
-                        st.error("⏱️ **Gemini rate limit hit** (too many requests per minute). Wait 30–60 seconds and try again. Your spend cap is fine — this is just a temporary throttle.")
-                    elif "INVALID_API_KEY" in err_str or "401" in err_str:
-                        st.error("🔑 **Gemini API key is invalid.** In Streamlit Cloud → App settings → Secrets, make sure `GEMINI_API_KEY` is set to a valid key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey).")
-                    elif "FORBIDDEN" in err_str or "403" in err_str:
-                        st.error("🚫 **Gemini API not enabled.** The Generative Language API is not enabled for this key's project. Enable it at [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Generative Language API.")
+                    if "QUOTA_429||" in err_str:
+                        raw_google = err_str.split("QUOTA_429||", 1)[1]
+                        raw_lower = raw_google.lower()
+                        if "spending" in raw_lower or "spend" in raw_lower:
+                            st.error("💳 **Gemini spending cap exceeded.** The API key's project has hit its monthly spend cap.")
+                            st.info(f"📋 **Google's exact message:** `{raw_google[:300]}`\n\n👉 Go to [aistudio.google.com/spend](https://aistudio.google.com/spend) — make sure the **project** matches the one your API key belongs to.")
+                        elif "resource_exhausted" in raw_lower or "quota" in raw_lower or "rate" in raw_lower:
+                            st.warning("⏱️ **Gemini rate limit hit** — too many requests per minute. Wait 30–60 seconds and click Find Competitors again.")
+                            st.info(f"📋 **Google's exact message:** `{raw_google[:200]}`")
+                        else:
+                            st.error(f"❌ **Gemini 429 error.** Google's raw response: `{raw_google[:300]}`")
+                    elif "INVALID_API_KEY" in err_str:
+                        raw_google = err_str.split("||", 1)[1] if "||" in err_str else err_str
+                        st.error("🔑 **Gemini API key is invalid or rejected.**")
+                        st.info(f"📋 Google says: `{raw_google[:200]}`\n\nIn Streamlit Cloud → App settings → Secrets, verify `GEMINI_API_KEY = \"AIza...\"` is correct and from [aistudio.google.com/apikey](https://aistudio.google.com/apikey).")
+                    elif "INVALID_API_KEY" in err_str or "FORBIDDEN" in err_str or "403" in err_str:
+                        st.error("🚫 **Gemini API not enabled** for this key's project.")
+                        st.info("Enable the Generative Language API at console.cloud.google.com → APIs & Services.")
+                    elif "ALL_FAILED||" in err_str:
+                        detail = err_str.split("ALL_FAILED||", 1)[1]
+                        st.error(f"❌ **All Gemini models failed.** {detail}")
                     else:
                         st.error(f"❌ Gemini failed: {e}")
                     gemini_competitors = []

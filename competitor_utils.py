@@ -328,7 +328,7 @@ STEP 3 — HARD EXCLUSIONS — reject immediately, no exceptions:
 ✗ Any domain you are not confident exists and is correct
 
 OUTPUT RULES:
-- Aim for 6–12 genuine competitors; fewer is better than including noise
+- Include ALL genuine competitors you can identify — do not cap the list
 - Prefer country-specific domains (e.g. nz.brand.com, brand.co.nz for NZ market)
 - If unsure whether a site belongs, exclude it
 - Return ONLY a compact single-line JSON array, no explanation, no markdown:
